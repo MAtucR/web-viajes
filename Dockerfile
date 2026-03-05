@@ -51,13 +51,14 @@ COPY --from=builder /app/public           ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static     ./.next/static
 
-# Prisma client (query engine)
-COPY --from=deps /app/node_modules/.prisma      ./node_modules/.prisma
-COPY --from=deps /app/node_modules/@prisma      ./node_modules/@prisma
-# Prisma CLI (necesario para migrate deploy en entrypoint, evita que npx lo descargue en runtime)
-COPY --from=deps /app/node_modules/prisma       ./node_modules/prisma
-COPY --from=deps /app/node_modules/.bin/prisma  ./node_modules/.bin/prisma
-COPY --from=deps /app/prisma                    ./prisma
+# Prisma client (query engine) para runtime de la app
+COPY --from=deps /app/node_modules/.prisma  ./node_modules/.prisma
+COPY --from=deps /app/node_modules/@prisma  ./node_modules/@prisma
+# prisma/schema para que el client encuentre los modelos
+COPY --from=deps /app/prisma                ./prisma
+
+# La migración la corre un initContainer en k8s usando la imagen de deps.
+# El runner NO necesita la CLI de prisma, solo el client.
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
