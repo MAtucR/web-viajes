@@ -10,7 +10,6 @@ WORKDIR /app
 COPY package.json ./
 COPY prisma ./prisma/
 
-# npm install en lugar de npm ci (no requiere package-lock.json)
 RUN npm install
 RUN npx prisma generate
 
@@ -47,15 +46,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser  --system --uid 1001 nextjs
 
-# Next.js standalone output
+# Next.js standalone
 COPY --from=builder /app/public           ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static     ./.next/static
 
-# Prisma client para runtime
-COPY --from=deps /app/node_modules/.prisma  ./node_modules/.prisma
-COPY --from=deps /app/node_modules/@prisma  ./node_modules/@prisma
-COPY --from=deps /app/prisma                ./prisma
+# Prisma client (query engine)
+COPY --from=deps /app/node_modules/.prisma      ./node_modules/.prisma
+COPY --from=deps /app/node_modules/@prisma      ./node_modules/@prisma
+# Prisma CLI (necesario para migrate deploy en entrypoint, evita que npx lo descargue en runtime)
+COPY --from=deps /app/node_modules/prisma       ./node_modules/prisma
+COPY --from=deps /app/node_modules/.bin/prisma  ./node_modules/.bin/prisma
+COPY --from=deps /app/prisma                    ./prisma
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
