@@ -1,13 +1,11 @@
 ## ─────────────────────────────────────────────────────────────────────────────
 ## ingress.yaml — Traefik Ingress + cert-manager (Let's Encrypt)
 ##
-## El ClusterIssuer está definido en cluster-issuer.yaml
-##
 ## Prerequisitos:
-##   1. cert-manager instalado en el cluster
-##   2. ClusterIssuer "letsencrypt-prod" creado (ver cluster-issuer.yaml)
-##   3. Traefik (incluido en k3s) escuchando en puertos 80 y 443
-##   4. DNS de viajaconmoni.com apuntando a la IP del nodo/LoadBalancer
+##   1. cert-manager instalado + ClusterIssuer letsencrypt-prod creado
+##      (ver prereqs/cluster-issuer.yaml)
+##   2. Traefik (incluido en k3s) escuchando en puertos 80 y 443
+##   3. DNS de viajaconmoni.com apuntando a la IP del nodo/LoadBalancer
 ## ─────────────────────────────────────────────────────────────────────────────
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -17,17 +15,11 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "2"
     ## ── Traefik ──────────────────────────────────────────────────────────────
-    ## IngressClass (Traefik en k3s)
     kubernetes.io/ingress.class: "traefik"
-
-    ## Sólo escuchar en HTTPS (websecure)
     traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
     traefik.ingress.kubernetes.io/router.tls: "true"
-
-    ## Middleware para forzar HTTP → HTTPS
-    ## Nota: en k3s con Traefik >= v2.10 el namespace del middleware es viaja-con-moni
+    ## Middleware de redirect HTTP → HTTPS (definido más abajo)
     traefik.ingress.kubernetes.io/router.middlewares: "viaja-con-moni-redirect-https@kubernetescrd"
-
     ## ── cert-manager ─────────────────────────────────────────────────────────
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     cert-manager.io/acme-challenge-type: "http01"
@@ -40,7 +32,6 @@ spec:
         - viajaconmoni.com
         - www.viajaconmoni.com
       secretName: viajaconmoni-tls
-
   rules:
     - host: viajaconmoni.com
       http:
@@ -52,7 +43,6 @@ spec:
                 name: viaja-con-moni-service
                 port:
                   number: 80
-
     - host: www.viajaconmoni.com
       http:
         paths:
@@ -66,15 +56,16 @@ spec:
 
 ---
 
-## ── Middleware Traefik: redirige HTTP → HTTPS ─────────────────────────────────
+## ── Middleware Traefik: HTTP → HTTPS ─────────────────────────────────────────
 ##
-## API group según versión de Traefik en tu k3s:
-##   - Traefik v2.0–v2.9  → traefik.containo.us/v1alpha1
-##   - Traefik v2.10+/v3  → traefik.io/v1alpha1
+## API: traefik.containo.us/v1alpha1  →  compatible con Traefik v2.x (k3s default)
+##      traefik.io/v1alpha1           →  Traefik v3.x
 ##
-## Para saber tu versión: kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
-## Si fallara, cambiar el apiVersion a traefik.containo.us/v1alpha1
-apiVersion: traefik.io/v1alpha1
+## Para saber tu versión:
+##   kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
+##
+## Si estás en Traefik v3, cambiá el apiVersion a: traefik.io/v1alpha1
+apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
   name: redirect-https

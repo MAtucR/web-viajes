@@ -1,15 +1,15 @@
 ## ─────────────────────────────────────────────────────────────────────────────
 ## argocd/application.yaml — ArgoCD Application
 ##
-## Requisitos previos en el cluster:
-##   kubectl create namespace argocd
-##   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+## Prerequisitos en el cluster ANTES de aplicar esto:
+##   1. cert-manager instalado:
+##        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+##        kubectl wait --for=condition=available --timeout=120s deployment/cert-manager -n cert-manager
+##   2. ClusterIssuer creado:
+##        kubectl apply -f prereqs/cluster-issuer.yaml
 ##
 ## Aplicar con:
 ##   kubectl apply -f argocd/application.yaml
-##
-## ArgoCD leerá el directorio k8s/ de este repositorio y sincronizará
-## todos los manifests automáticamente.
 ## ─────────────────────────────────────────────────────────────────────────────
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -17,7 +17,6 @@ metadata:
   name: web-viajes
   namespace: argocd
   finalizers:
-    ## Borra todos los recursos del cluster cuando se elimine la Application
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
@@ -33,12 +32,15 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true       # Elimina recursos que ya no existen en el repo
-      selfHeal: true    # Corrige cambios manuales en el cluster
+      prune: true
+      selfHeal: true
     syncOptions:
-      - CreateNamespace=true           # Crea el namespace si no existe
-      - ServerSideApply=true           # Mejor manejo de conflictos en campos gestionados
+      - CreateNamespace=true
+      - ServerSideApply=true
       - RespectIgnoreDifferences=true
+      ## Sin esta opción, un CRD desconocido (ej: cert-manager no instalado)
+      ## aborta todo el sync y ningún recurso se aplica.
+      - SkipDryRunOnMissingResource=true
     retry:
       limit: 5
       backoff:
@@ -46,8 +48,6 @@ spec:
         factor: 2
         maxDuration: 3m
 
-  ## ArgoCD ignora cambios en labels/annotations del Namespace
-  ## que k3s añade automáticamente
   ignoreDifferences:
     - group: ""
       kind: Namespace

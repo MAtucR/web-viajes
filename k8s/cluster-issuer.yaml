@@ -1,25 +1,8 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## cluster-issuer.yaml — ClusterIssuer de cert-manager (cluster-scoped)
+## ESTE ARCHIVO ESTÁ VACÍO INTENCIONALMENTE
 ##
-## Prerequisito: cert-manager instalado en el cluster.
-##   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+## El ClusterIssuer de cert-manager es un PREREQUISITO que debe aplicarse
+## manualmente ANTES de que ArgoCD sincronice esta Application.
 ##
-## ArgoCD gestiona este recurso cluster-scoped porque el proyecto default
-## tiene clusterResourceWhitelist: [{group: "*", kind: "*"}]
+## Ver: prereqs/cluster-issuer.yaml
 ## ─────────────────────────────────────────────────────────────────────────────
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-  annotations:
-    argocd.argoproj.io/sync-wave: "-2"
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@viajaconmoni.com          # ← Cambiar por tu email real
-    privateKeySecretRef:
-      name: letsencrypt-prod-key
-    solvers:
-      - http01:
-          ingress:
-            class: traefik

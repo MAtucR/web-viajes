@@ -1,0 +1,32 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## prereqs/cluster-issuer.yaml — ClusterIssuer de cert-manager
+##
+## Este archivo es un PREREQUISITO: debe aplicarse manualmente ANTES de que
+## ArgoCD sincronice la Application. No está en k8s/ porque requiere que
+## cert-manager ya esté instalado (sus CRDs deben existir en el cluster).
+##
+## Pasos:
+##   1. Instalar cert-manager:
+##        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+##        kubectl wait --for=condition=available --timeout=120s deployment/cert-manager -n cert-manager
+##        kubectl wait --for=condition=available --timeout=120s deployment/cert-manager-webhook -n cert-manager
+##
+##   2. Aplicar este ClusterIssuer:
+##        kubectl apply -f prereqs/cluster-issuer.yaml
+##
+##   3. Recién después aplicar (o dejar que se auto-sincronice) la Application de ArgoCD.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@viajaconmoni.com    # ← Cambiar por tu email real
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
