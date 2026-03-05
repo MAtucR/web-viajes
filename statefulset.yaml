@@ -1,0 +1,154 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## statefulset.yaml  +  service.yaml — PostgreSQL en k3s
+## ─────────────────────────────────────────────────────────────────────────────
+
+## Namespace compartido por toda la app
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: viaja-con-moni
+
+---
+
+## ── PersistentVolumeClaim ────────────────────────────────────────────────────
+## En k3s el StorageClass por defecto es "local-path" (provisionador automático)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path   # StorageClass por defecto de k3s
+  resources:
+    requests:
+      storage: 5Gi               # Ajustar según el volumen esperado de datos
+
+---
+
+## ── StatefulSet ──────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  serviceName: postgres-service
+  replicas: 1                    # PostgreSQL standalone; para HA usar operadores (CloudNativePG)
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name:    postgres
+        app.kubernetes.io/part-of: viaja-con-moni
+    spec:
+      terminationGracePeriodSeconds: 60
+
+      ## Seguridad: corre como usuario postgres (UID 999)
+      securityContext:
+        runAsUser:  999
+        runAsGroup: 999
+        fsGroup:    999
+
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+
+          ## Variables desde el Secret
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key:  POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key:  POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key:  POSTGRES_DB
+            ## Directorio de datos explícito
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          ## Montaje del volumen persistente
+          volumeMounts:
+            - name:      postgres-storage
+              mountPath: /var/lib/postgresql/data
+
+          ## Recursos (ajustar a tu nodo)
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "256Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "1Gi"
+
+          ## Health checks
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+            initialDelaySeconds: 30
+            periodSeconds:       10
+            timeoutSeconds:      5
+            failureThreshold:    6
+
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+            initialDelaySeconds: 5
+            periodSeconds:       5
+            timeoutSeconds:      3
+            failureThreshold:    3
+
+      ## Usa el PVC creado arriba (no volumeClaimTemplates para reusar el mismo PVC)
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+
+## ── Service (ClusterIP — interno al cluster) ─────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name:       postgres
+      port:       5432
+      targetPort: 5432
+      protocol:   TCP

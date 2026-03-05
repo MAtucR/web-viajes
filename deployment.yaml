@@ -1,0 +1,151 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## deployment.yaml — Next.js App en k3s
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: viaja-con-moni-app
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2                    # Mínimo 2 réplicas para alta disponibilidad
+  selector:
+    matchLabels:
+      app: viaja-con-moni-app
+  ## Rolling update: nunca baja todas las réplicas al mismo tiempo
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:       1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: viaja-con-moni-app
+        app.kubernetes.io/name:    viaja-con-moni-app
+        app.kubernetes.io/part-of: viaja-con-moni
+      annotations:
+        ## Fuerza redeploy cuando el Secret cambia (opcional, requiere Reloader)
+        secret.reloader.stakater.com/reload: "app-secret"
+    spec:
+      ## Distribuir réplicas en distintos nodos si hay más de uno
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key:      app
+                      operator: In
+                      values:   ["viaja-con-moni-app"]
+                topologyKey: kubernetes.io/hostname
+
+      ## Esperar a que Postgres esté listo antes de arrancar el pod
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z postgres-service 5432; do
+                echo "Esperando a PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL disponible ✅"
+
+      containers:
+        - name: app
+          ## Reemplazar con tu registry real, ej: ghcr.io/tu-org/viaja-con-moni:1.0.0
+          image: ghcr.io/tu-org/viaja-con-moni:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+
+          ## Variables de entorno desde Secrets
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key:  DATABASE_URL
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key:  NEXTAUTH_SECRET
+            - name: NEXTAUTH_URL
+              value: "https://viajaconmoni.com"
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            ## Fuerza a Next.js a usar el output standalone
+            - name: NEXT_TELEMETRY_DISABLED
+              value: "1"
+
+          ## Recursos (ajustar según el perfil de tu app)
+          resources:
+            requests:
+              cpu:    "200m"
+              memory: "256Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "1Gi"
+
+          ## Health checks
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds:       20
+            timeoutSeconds:      5
+            failureThreshold:    3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds:       10
+            timeoutSeconds:      3
+            failureThreshold:    3
+
+          ## Seguridad del contenedor
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem:   false   # Next.js necesita escribir en /tmp
+            runAsNonRoot:             true
+            runAsUser:                1001
+            capabilities:
+              drop: ["ALL"]
+
+---
+
+## ── Service (ClusterIP — expuesto al Ingress) ────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: viaja-con-moni-service
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  type: ClusterIP
+  selector:
+    app: viaja-con-moni-app
+  ports:
+    - name:       http
+      port:       80
+      targetPort: 3000
+      protocol:   TCP

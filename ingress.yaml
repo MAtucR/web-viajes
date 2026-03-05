@@ -1,0 +1,129 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## ingress.yaml — Traefik Ingress + cert-manager (Let's Encrypt)
+##
+## Prerequisitos:
+##   1. cert-manager instalado en el cluster:
+##      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+##
+##   2. ClusterIssuer "letsencrypt-prod" creado (ver comentario al final).
+##
+##   3. Traefik (incluido en k3s) escuchando en puertos 80 y 443.
+##
+##   4. El DNS de viajaconmoni.com apuntando a la IP del nodo/LoadBalancer.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: viaja-con-moni-ingress
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+  annotations:
+    ## ── Traefik ──────────────────────────────────────────────────────────────
+    ## Clase del Ingress Controller (Traefik en k3s usa "traefik")
+    kubernetes.io/ingress.class: "traefik"
+
+    ## Redirigir HTTP → HTTPS automáticamente
+    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+
+    ## Middleware para forzar HTTPS (redirigir desde el entrypoint web)
+    traefik.ingress.kubernetes.io/router.middlewares: "viaja-con-moni-redirect-https@kubernetescrd"
+
+    ## ── cert-manager ─────────────────────────────────────────────────────────
+    ## Indica a cert-manager qué ClusterIssuer usar para emitir el certificado
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    ## Tipo de desafío ACME (http01 es el más simple; usar dns01 para wildcards)
+    cert-manager.io/acme-challenge-type: "http01"
+
+spec:
+  ## TLS: cert-manager creará y renovará automáticamente el certificado
+  tls:
+    - hosts:
+        - viajaconmoni.com
+        - www.viajaconmoni.com
+      ## cert-manager almacena el certificado en este Secret
+      secretName: viajaconmoni-tls
+
+  rules:
+    ## ── Dominio raíz ──────────────────────────────────────────────────────
+    - host: viajaconmoni.com
+      http:
+        paths:
+          - path:     /
+            pathType: Prefix
+            backend:
+              service:
+                name: viaja-con-moni-service
+                port:
+                  number: 80
+
+    ## ── www (alias) ───────────────────────────────────────────────────────
+    - host: www.viajaconmoni.com
+      http:
+        paths:
+          - path:     /
+            pathType: Prefix
+            backend:
+              service:
+                name: viaja-con-moni-service
+                port:
+                  number: 80
+
+---
+
+## ── Middleware Traefik: redirige HTTP → HTTPS ─────────────────────────────────
+## Requiere el CRD de Traefik (disponible por defecto en k3s >= 1.21)
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: viaja-con-moni
+spec:
+  redirectScheme:
+    scheme:    https
+    permanent: true   # 301
+
+---
+
+## ─────────────────────────────────────────────────────────────────────────────
+## ClusterIssuer de cert-manager (aplicar UNA SOLA VEZ, no por namespace)
+## Guardá esto en un archivo separado, ej: cluster-issuer.yaml
+## y aplicalo con: kubectl apply -f cluster-issuer.yaml
+## ─────────────────────────────────────────────────────────────────────────────
+##
+## STAGING (para pruebas, no genera certificados válidos pero sin rate-limit):
+## ─────────────────────────────────────────────────────────────────────────────
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-staging
+# spec:
+#   acme:
+#     server: https://acme-staging-v02.api.letsencrypt.org/directory
+#     email: tu-email@ejemplo.com          # ← CAMBIAR
+#     privateKeySecretRef:
+#       name: letsencrypt-staging-key
+#     solvers:
+#       - http01:
+#           ingress:
+#             class: traefik
+
+## PRODUCCIÓN (certificados válidos, rate-limit de Let's Encrypt aplica):
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@viajaconmoni.com          # ← CAMBIAR por tu email real
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
