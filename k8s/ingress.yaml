@@ -18,7 +18,8 @@ metadata:
     kubernetes.io/ingress.class: "traefik"
     traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
     traefik.ingress.kubernetes.io/router.tls: "true"
-    ## Middleware de redirect HTTP → HTTPS (definido más abajo)
+    ## Traefik construye la referencia como: <namespace>-<name>@kubernetescrd
+    ## namespace=viaja-con-moni + name=redirect-https → viaja-con-moni-redirect-https@kubernetescrd ✅
     traefik.ingress.kubernetes.io/router.middlewares: "viaja-con-moni-redirect-https@kubernetescrd"
     ## ── cert-manager ─────────────────────────────────────────────────────────
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
@@ -58,17 +59,19 @@ spec:
 
 ## ── Middleware Traefik: HTTP → HTTPS ─────────────────────────────────────────
 ##
-## API: traefik.containo.us/v1alpha1  →  compatible con Traefik v2.x (k3s default)
-##      traefik.io/v1alpha1           →  Traefik v3.x
+## IMPORTANTE: el nombre DEBE ser 'redirect-https' (no incluir el namespace).
+## Traefik arma la referencia como <namespace>-<name>@kubernetescrd:
+##   namespace: viaja-con-moni  +  name: redirect-https
+##   → viaja-con-moni-redirect-https@kubernetescrd  ← lo que usa el Ingress
 ##
-## Para saber tu versión:
-##   kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
-##
-## Si estás en Traefik v3, cambiá el apiVersion a: traefik.io/v1alpha1
+## apiVersion según versión de Traefik en tu k3s:
+##   traefik.io/v1alpha1          → Traefik v3.x  (k3s >= 1.30 aprox)
+##   traefik.containo.us/v1alpha1 → Traefik v2.x
+## Verificar: kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: viaja-con-moni-redirect-https
+  name: redirect-https
   namespace: viaja-con-moni
   annotations:
     argocd.argoproj.io/sync-wave: "2"
