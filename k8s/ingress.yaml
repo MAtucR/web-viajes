@@ -1,11 +1,11 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## ingress.yaml — Traefik Ingress + cert-manager (Let's Encrypt)
+## ingress.yaml — Traefik Ingress
 ##
-## Prerequisitos:
-##   1. cert-manager instalado + ClusterIssuer letsencrypt-prod creado
-##      (ver prereqs/cluster-issuer.yaml)
-##   2. Traefik (incluido en k3s) escuchando en puertos 80 y 443
-##   3. DNS de viajaconmoni.com apuntando a la IP del nodo/LoadBalancer
+## MODO ACTUAL: HTTP solamente (sin TLS)
+## Para activar HTTPS cuando tengas DNS y puerto 443 expuesto:
+##   1. Aplicar prereqs/cluster-issuer.yaml
+##   2. Descomentar la sección tls: y las annotations de cert-manager
+##   3. Cambiar entrypoints a "websecure" y agregar router.tls: "true"
 ## ─────────────────────────────────────────────────────────────────────────────
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -14,28 +14,22 @@ metadata:
   namespace: viaja-con-moni
   annotations:
     argocd.argoproj.io/sync-wave: "2"
-    ## ── Traefik ──────────────────────────────────────────────────────────────
     kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
-    traefik.ingress.kubernetes.io/router.tls: "true"
-    ## Traefik construye la referencia como: <namespace>-<name>@kubernetescrd
-    ## namespace=viaja-con-moni + name=redirect-https → viaja-con-moni-redirect-https@kubernetescrd ✅
-    ## traefik.ingress.kubernetes.io/router.middlewares: "viaja-con-moni-redirect-https@kubernetescrd"
-    ## ── cert-manager ─────────────────────────────────────────────────────────
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    cert-manager.io/acme-challenge-type: "http01"
+    ## Escuchar en HTTP (puerto 80) — sin TLS por ahora
+    traefik.ingress.kubernetes.io/router.entrypoints: "web"
   labels:
     app.kubernetes.io/name:    viaja-con-moni-app
     app.kubernetes.io/part-of: viaja-con-moni
 spec:
-  tls:
-    - hosts:
-        - viajaconmoni.com
-        - www.viajaconmoni.com
-      secretName: viajaconmoni-tls
+  ## TLS desactivado hasta tener DNS + puerto 443 expuesto
+  ## tls:
+  ##   - hosts:
+  ##       - viajaconmoni.com
+  ##       - www.viajaconmoni.com
+  ##     secretName: viajaconmoni-tls
   rules:
-    - host: viajaconmoni.com
-      http:
+    ## Regla sin host: responde a cualquier IP/hostname → para probar con IP pública
+    - http:
         paths:
           - path:     /
             pathType: Prefix
@@ -44,38 +38,3 @@ spec:
                 name: viaja-con-moni-service
                 port:
                   number: 80
-    - host: www.viajaconmoni.com
-      http:
-        paths:
-          - path:     /
-            pathType: Prefix
-            backend:
-              service:
-                name: viaja-con-moni-service
-                port:
-                  number: 80
-
----
-
-## ── Middleware Traefik: HTTP → HTTPS ─────────────────────────────────────────
-##
-## IMPORTANTE: el nombre DEBE ser 'redirect-https' (no incluir el namespace).
-## Traefik arma la referencia como <namespace>-<name>@kubernetescrd:
-##   namespace: viaja-con-moni  +  name: redirect-https
-##   → viaja-con-moni-redirect-https@kubernetescrd  ← lo que usa el Ingress
-##
-## apiVersion según versión de Traefik en tu k3s:
-##   traefik.io/v1alpha1          → Traefik v3.x  (k3s >= 1.30 aprox)
-##   traefik.containo.us/v1alpha1 → Traefik v2.x
-## Verificar: kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-https
-  namespace: viaja-con-moni
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
-spec:
-  redirectScheme:
-    scheme:    https
-    permanent: true
