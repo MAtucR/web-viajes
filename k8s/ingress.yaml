@@ -65,7 +65,7 @@ spec:
 ##   kubectl -n kube-system get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
 ##
 ## Si estás en Traefik v3, cambiá el apiVersion a: traefik.io/v1alpha1
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect-https
