@@ -1,0 +1,54 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// prisma/schema.prisma
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+
+  /**
+   * binaryTargets:
+   *   - "native"                      → tu máquina de desarrollo (macOS/Linux/Windows)
+   *   - "linux-musl-openssl-3.0.x"   → Alpine Linux dentro del contenedor Docker
+   *
+   * Sin este target, Prisma no va a encontrar el binario correcto en runtime
+   * y la app va a crashear con "Query engine binary not found".
+   */
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modelos de ejemplo — reemplazar con los modelos reales de "Viaja con Moni"
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+
+  @@map("users")
+}
+
+model Trip {
+  id          String   @id @default(cuid())
+  title       String
+  destination String
+  startDate   DateTime
+  endDate     DateTime
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("trips")
+}
