@@ -1,14 +1,7 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## statefulset.yaml  +  service.yaml — PostgreSQL en k3s
+## statefulset.yaml — PostgreSQL en k3s
+## El Namespace está definido en namespace.yaml
 ## ─────────────────────────────────────────────────────────────────────────────
-
-## Namespace compartido por toda la app
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: viaja-con-moni
-
----
 
 ## ── PersistentVolumeClaim ────────────────────────────────────────────────────
 ## En k3s el StorageClass por defecto es "local-path" (provisionador automático)
@@ -17,6 +10,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name:    postgres
     app.kubernetes.io/part-of: viaja-con-moni
@@ -36,6 +31,8 @@ kind: StatefulSet
 metadata:
   name: postgres
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app.kubernetes.io/name:    postgres
     app.kubernetes.io/part-of: viaja-con-moni
@@ -140,6 +137,8 @@ kind: Service
 metadata:
   name: postgres-service
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app.kubernetes.io/name:    postgres
     app.kubernetes.io/part-of: viaja-con-moni

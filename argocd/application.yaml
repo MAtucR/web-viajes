@@ -1,0 +1,56 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## argocd/application.yaml — ArgoCD Application
+##
+## Requisitos previos en el cluster:
+##   kubectl create namespace argocd
+##   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+##
+## Aplicar con:
+##   kubectl apply -f argocd/application.yaml
+##
+## ArgoCD leerá el directorio k8s/ de este repositorio y sincronizará
+## todos los manifests automáticamente.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web-viajes
+  namespace: argocd
+  finalizers:
+    ## Borra todos los recursos del cluster cuando se elimine la Application
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/MAtucR/web-viajes.git
+    targetRevision: main
+    path: k8s
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: viaja-con-moni
+
+  syncPolicy:
+    automated:
+      prune: true       # Elimina recursos que ya no existen en el repo
+      selfHeal: true    # Corrige cambios manuales en el cluster
+    syncOptions:
+      - CreateNamespace=true           # Crea el namespace si no existe
+      - ServerSideApply=true           # Mejor manejo de conflictos en campos gestionados
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ## ArgoCD ignora cambios en labels/annotations del Namespace
+  ## que k3s añade automáticamente
+  ignoreDifferences:
+    - group: ""
+      kind: Namespace
+      jsonPointers:
+        - /metadata/labels
+        - /metadata/annotations

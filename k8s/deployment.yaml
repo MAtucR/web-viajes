@@ -6,12 +6,14 @@ kind: Deployment
 metadata:
   name: viaja-con-moni-app
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name:    viaja-con-moni-app
     app.kubernetes.io/part-of: viaja-con-moni
     app.kubernetes.io/version: "1.0.0"
 spec:
-  replicas: 2                    # Mínimo 2 réplicas para alta disponibilidad
+  replicas: 2
   selector:
     matchLabels:
       app: viaja-con-moni-app
@@ -29,9 +31,15 @@ spec:
         app.kubernetes.io/name:    viaja-con-moni-app
         app.kubernetes.io/part-of: viaja-con-moni
       annotations:
-        ## Fuerza redeploy cuando el Secret cambia (opcional, requiere Reloader)
+        ## Fuerza redeploy cuando el Secret cambia (requiere Reloader de Stakater)
         secret.reloader.stakater.com/reload: "app-secret"
     spec:
+      ## Secret para pullear la imagen de ghcr.io
+      ## Si la imagen es pública, eliminar este bloque.
+      ## Crear el secret manualmente (ver k8s/registry-secret.yaml)
+      imagePullSecrets:
+        - name: ghcr-secret
+
       ## Distribuir réplicas en distintos nodos si hay más de uno
       affinity:
         podAntiAffinity:
@@ -61,8 +69,9 @@ spec:
 
       containers:
         - name: app
-          ## Reemplazar con tu registry real, ej: ghcr.io/tu-org/viaja-con-moni:1.0.0
-          image: ghcr.io/tu-org/viaja-con-moni:latest
+          ## Imagen buildeada por GitHub Actions y pusheada a GHCR
+          ## El workflow .github/workflows/build-push.yml genera esta imagen
+          image: ghcr.io/matucr/web-viajes:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -88,7 +97,6 @@ spec:
               value: "3000"
             - name: HOSTNAME
               value: "0.0.0.0"
-            ## Fuerza a Next.js a usar el output standalone
             - name: NEXT_TELEMETRY_DISABLED
               value: "1"
 
@@ -137,6 +145,8 @@ kind: Service
 metadata:
   name: viaja-con-moni-service
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name:    viaja-con-moni-app
     app.kubernetes.io/part-of: viaja-con-moni

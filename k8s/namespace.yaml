@@ -1,0 +1,14 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## namespace.yaml — Namespace compartido por toda la app
+##
+## Recurso cluster-scoped. ArgoCD lo gestiona con CreateNamespace=true
+## y clusterResourceWhitelist en el proyecto default.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/part-of: viaja-con-moni
