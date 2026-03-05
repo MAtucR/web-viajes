@@ -91,7 +91,7 @@ export default function TripForm({ trip }: { trip?: TripData }) {
       <Field name="whatsappMsg" label="Mensaje WhatsApp" placeholder="¡Hola! Me interesa el viaje..." />
       <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <input name="published" id="published" type="checkbox" checked={form.published}
-          onChange={handleChange} style={{ width: 'auto', cursor: 'pointer', width: '1.1rem', height: '1.1rem' }} />
+          onChange={handleChange} style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }} />
         <label htmlFor="published" style={{ margin: 0, cursor: 'pointer', fontWeight: 500 }}>Publicar viaje (visible en la web)</label>
       </div>
       {error && <p style={{ color: '#dc2626', marginBottom: '1rem' }}>{error}</p>}
