@@ -11,7 +11,6 @@ metadata:
   labels:
     app.kubernetes.io/name:    viaja-con-moni-app
     app.kubernetes.io/part-of: viaja-con-moni
-    app.kubernetes.io/version: "1.0.0"
 spec:
   replicas: 2
   selector:
@@ -42,13 +41,12 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchExpressions:
-                    - key:      app
+                    - key: app
                       operator: In
-                      values:   ["viaja-con-moni-app"]
+                      values: ["viaja-con-moni-app"]
                 topologyKey: kubernetes.io/hostname
 
       initContainers:
-        ## 1. Esperar a que Postgres esté disponible
         - name: wait-for-postgres
           image: busybox:1.36
           command:
@@ -61,9 +59,6 @@ spec:
               done
               echo "PostgreSQL disponible ✅"
 
-        ## 2. Correr migraciones de Prisma
-        ## Usa la misma imagen de la app que ya tiene la CLI completa de Prisma
-        ## (node_modules/prisma con el .wasm incluido)
         - name: migrate
           image: ghcr.io/matucr/web-viajes:latest
           imagePullPolicy: Always
@@ -71,7 +66,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              echo "▶ Corriendo migraciones de Prisma..."
+              echo "▶ Corriendo migraciones..."
               node_modules/.bin/prisma migrate deploy
               echo "✅ Migraciones completadas"
           env:
@@ -79,7 +74,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: app-secret
-                  key:  DATABASE_URL
+                  key: DATABASE_URL
 
       containers:
         - name: app
@@ -96,12 +91,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: app-secret
-                  key:  DATABASE_URL
+                  key: DATABASE_URL
             - name: NEXTAUTH_SECRET
               valueFrom:
                 secretKeyRef:
                   name: app-secret
-                  key:  NEXTAUTH_SECRET
+                  key: NEXTAUTH_SECRET
             - name: NEXTAUTH_URL
               value: "https://viajaconmoni.com"
             - name: PORT
@@ -119,20 +114,24 @@ spec:
               cpu:    "1000m"
               memory: "1Gi"
 
+          ## livenessProbe: solo verifica que el proceso está vivo (NO toca DB)
+          ## Si fallara esto, el pod realmente está muerto y se reinicia.
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: /api/ping
               port: 3000
-            initialDelaySeconds: 30
-            periodSeconds:       20
-            timeoutSeconds:      5
+            initialDelaySeconds: 20
+            periodSeconds:       15
+            timeoutSeconds:      3
             failureThreshold:    3
 
+          ## readinessProbe: verifica que la app puede servir tráfico con DB
+          ## Si falla, el pod sale del balanceo pero NO se reinicia.
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds:       10
             timeoutSeconds:      3
             failureThreshold:    3
