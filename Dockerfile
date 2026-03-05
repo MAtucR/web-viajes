@@ -28,6 +28,10 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+# next-auth v4 requiere NEXTAUTH_SECRET en NODE_ENV=production, incluso en build time.
+# El valor real se inyecta en runtime vía k8s secret — este es solo un placeholder de build.
+ENV NEXTAUTH_SECRET="build-time-placeholder-overridden-at-runtime"
+ENV NEXTAUTH_URL="http://localhost:3000"
 
 RUN npm run build
 
