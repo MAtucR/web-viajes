@@ -68,7 +68,7 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: redirect-https
+  name: viaja-con-moni-redirect-https
   namespace: viaja-con-moni
   annotations:
     argocd.argoproj.io/sync-wave: "2"
