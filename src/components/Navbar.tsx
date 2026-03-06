@@ -5,12 +5,13 @@ import { useState, useEffect } from 'react';
 
 export default function Navbar() {
   const { data: session } = useSession();
-  const role    = (session?.user as any)?.role as string | undefined;
-  const isAdmin = role === 'ADMIN';
-  const isGuide = role === 'GUIDE';
-  const [scrolled,  setScrolled]  = useState(false);
-  const [menuOpen,  setMenuOpen]  = useState(false);
-  const [userMenu,  setUserMenu]  = useState(false);
+  const role      = (session?.user as any)?.role as string | undefined;
+  const avatarUrl = (session?.user as any)?.avatarUrl as string | undefined;
+  const isAdmin   = role === 'ADMIN';
+  const isGuide   = role === 'GUIDE';
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenu, setUserMenu] = useState(false);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
@@ -18,7 +19,7 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
-  const userName   = session?.user?.name ?? session?.user?.email ?? '';
+  const userName    = session?.user?.name ?? session?.user?.email ?? '';
   const userInitial = userName.charAt(0).toUpperCase();
 
   const ROLE_BADGE: Record<string, { label: string; color: string }> = {
@@ -28,21 +29,30 @@ export default function Navbar() {
   };
   const badge = role ? ROLE_BADGE[role] : null;
 
+  const Avatar = ({ size = 28 }: { size?: number }) => (
+    <div style={{ width: `${size}px`, height: `${size}px`, borderRadius: '50%', overflow: 'hidden', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {avatarUrl
+        ? <img src={avatarUrl} alt={userName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        : <span style={{ color: 'white', fontWeight: 700, fontSize: `${size * 0.38}px` }}>{userInitial}</span>
+      }
+    </div>
+  );
+
   return (
     <nav style={{
-      background: scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.92)',
+      background:    scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.92)',
       backdropFilter: 'blur(12px)',
-      borderBottom: scrolled ? '1px solid #e2e8f0' : '1px solid transparent',
-      padding: '0 1.5rem',
-      height: '68px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      boxShadow: scrolled ? '0 2px 12px rgba(0,0,0,0.08)' : 'none',
-      transition: 'all 0.3s ease',
+      borderBottom:  scrolled ? '1px solid #e2e8f0' : '1px solid transparent',
+      padding:       '0 1.5rem',
+      height:        '68px',
+      display:       'flex',
+      alignItems:    'center',
+      justifyContent:'space-between',
+      position:      'sticky',
+      top:           0,
+      zIndex:        100,
+      boxShadow:     scrolled ? '0 2px 12px rgba(0,0,0,0.08)' : 'none',
+      transition:    'all 0.3s ease',
     }}>
 
       {/* Logo */}
@@ -55,18 +65,16 @@ export default function Navbar() {
 
       {/* Desktop nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }} className="nav-desktop">
-        <NavLink href="/trips">Viajes</NavLink>
-        {(isAdmin || isGuide) && <NavLink href="/admin">Dashboard</NavLink>}
-        {isAdmin && <NavLink href="/admin/contactos">Contactos</NavLink>}
+        <NavLink href="/trips">✈️ Viajes</NavLink>
+        {(isAdmin || isGuide) && <NavLink href="/admin">📊 Dashboard</NavLink>}
+        {isAdmin && <NavLink href="/admin/contactos">👥 Contactos</NavLink>}
+        {isAdmin && <NavLink href="/admin/settings">⚙️ Settings</NavLink>}
 
         {session ? (
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setUserMenu(v => !v)}
+          <div style={{ position: 'relative', marginLeft: '0.25rem' }}>
+            <button onClick={() => setUserMenu(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: '1px solid #e2e8f0', borderRadius: '2rem', padding: '0.3rem 0.75rem 0.3rem 0.3rem', cursor: 'pointer' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.85rem' }}>
-                {userInitial}
-              </div>
+              <Avatar size={28} />
               <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#374151', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {userName.split(' ')[0]}
               </span>
@@ -78,20 +86,34 @@ export default function Navbar() {
             </button>
 
             {userMenu && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.875rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '180px', overflow: 'hidden', zIndex: 200 }}
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.875rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '190px', overflow: 'hidden', zIndex: 200 }}
                 onMouseLeave={() => setUserMenu(false)}>
+                {/* Perfil mini */}
+                <div style={{ padding: '0.9rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '0.625rem', alignItems: 'center' }}>
+                  <Avatar size={36} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e293b' }}>{userName.split(' ')[0]}</div>
+                    {badge && <div style={{ fontSize: '0.7rem', color: badge.color, fontWeight: 600 }}>{badge.label}</div>}
+                  </div>
+                </div>
                 <Link href="/mi-perfil" onClick={() => setUserMenu(false)}
-                  style={{ display: 'block', padding: '0.75rem 1rem', color: '#374151', fontSize: '0.875rem', fontWeight: 500, borderBottom: '1px solid #f1f5f9' }}>
+                  style={{ display: 'block', padding: '0.7rem 1rem', color: '#374151', fontSize: '0.875rem', fontWeight: 500, borderBottom: '1px solid #f1f5f9' }}>
                   👤 Mi perfil
                 </Link>
                 {(isAdmin || isGuide) && (
                   <Link href="/admin" onClick={() => setUserMenu(false)}
-                    style={{ display: 'block', padding: '0.75rem 1rem', color: '#374151', fontSize: '0.875rem', fontWeight: 500, borderBottom: '1px solid #f1f5f9' }}>
+                    style={{ display: 'block', padding: '0.7rem 1rem', color: '#374151', fontSize: '0.875rem', fontWeight: 500, borderBottom: '1px solid #f1f5f9' }}>
                     📊 Dashboard
                   </Link>
                 )}
+                {isAdmin && (
+                  <Link href="/admin/settings" onClick={() => setUserMenu(false)}
+                    style={{ display: 'block', padding: '0.7rem 1rem', color: '#374151', fontSize: '0.875rem', fontWeight: 500, borderBottom: '1px solid #f1f5f9' }}>
+                    ⚙️ Configuración
+                  </Link>
+                )}
                 <button onClick={() => signOut({ callbackUrl: '/' })}
-                  style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', color: '#dc2626', fontSize: '0.875rem', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                  style={{ display: 'block', width: '100%', padding: '0.7rem 1rem', color: '#dc2626', fontSize: '0.875rem', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                   🚪 Salir
                 </button>
               </div>
@@ -126,6 +148,7 @@ export default function Navbar() {
               <Link href="/mi-perfil" onClick={() => setMenuOpen(false)} style={{ color: '#374151', fontWeight: 500, padding: '0.5rem 0' }}>👤 Mi perfil</Link>
               {(isAdmin || isGuide) && <Link href="/admin" onClick={() => setMenuOpen(false)} style={{ color: '#374151', fontWeight: 500, padding: '0.5rem 0' }}>📊 Dashboard</Link>}
               {isAdmin && <Link href="/admin/contactos" onClick={() => setMenuOpen(false)} style={{ color: '#374151', fontWeight: 500, padding: '0.5rem 0' }}>👥 Contactos</Link>}
+              {isAdmin && <Link href="/admin/settings" onClick={() => setMenuOpen(false)} style={{ color: '#374151', fontWeight: 500, padding: '0.5rem 0' }}>⚙️ Settings</Link>}
               <button onClick={() => signOut({ callbackUrl: '/' })} style={{ background: '#fee2e2', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1rem', cursor: 'pointer', color: '#dc2626', fontWeight: 500, textAlign: 'left', fontSize: '1rem' }}>🚪 Salir</button>
             </>
           ) : (
