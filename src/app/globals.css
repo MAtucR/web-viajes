@@ -8,9 +8,9 @@ body {
 }
 
 a { color: inherit; text-decoration: none; }
-
 button { font-family: inherit; }
 
+/* ─ Cards ────────────────────────────────────────── */
 .card {
   background: white;
   border-radius: 1rem;
@@ -18,12 +18,12 @@ button { font-family: inherit; }
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
 }
-
 .card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
 }
 
+/* ─ Botones ───────────────────────────────────────── */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -39,7 +39,6 @@ button { font-family: inherit; }
   font-size: 1rem;
   transition: opacity 0.2s, transform 0.2s;
 }
-
 .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
 
 .btn-secondary {
@@ -57,11 +56,12 @@ button { font-family: inherit; }
   font-size: 1rem;
   transition: all 0.2s;
 }
-
 .btn-secondary:hover { background: #667eea; color: white; }
 
+/* ─ Layout ────────────────────────────────────────── */
 .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
 
+/* ─ Formularios ─────────────────────────────────────── */
 input, textarea, select {
   width: 100%;
   padding: 0.65rem 0.9rem;
@@ -72,13 +72,11 @@ input, textarea, select {
   outline: none;
   transition: border-color 0.2s;
 }
-
 input:focus, textarea:focus, select:focus { border-color: #667eea; }
-
 label { font-weight: 600; font-size: 0.875rem; color: #374151; display: block; margin-bottom: 0.35rem; }
-
 .form-group { margin-bottom: 1.25rem; }
 
+/* ─ Badges ─────────────────────────────────────────── */
 .badge {
   display: inline-block;
   padding: 0.2rem 0.6rem;
@@ -88,8 +86,95 @@ label { font-weight: 600; font-size: 0.875rem; color: #374151; display: block; m
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
 .badge-green  { background: #dcfce7; color: #15803d; }
 .badge-yellow { background: #fef9c3; color: #a16207; }
 .badge-red    { background: #fee2e2; color: #dc2626; }
 .badge-gray   { background: #f1f5f9; color: #64748b; }
+
+/* ─ Grilla de destinos (mosaico) ──────────────────────── */
+.dest-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 200px);
+  gap: 0.75rem;
+}
+.dest-card-wide { grid-column: span 2; }
+
+/* ─ Admin: panel dividido tabla + actividad ──────────────── */
+.admin-split {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   RESPONSIVE — tablet ≥ 768 px
+─────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  /* Admin: tabla + panel de actividad pasan a columna única */
+  .admin-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   RESPONSIVE — mobile < 640 px
+─────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Contenedor con más aire en los laterales */
+  .container { padding: 0 1rem; }
+
+  /* Destinos: 2 columnas, altura fija manejable, sin span */
+  .dest-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: 130px;
+  }
+  .dest-card-wide { grid-column: span 1; }
+
+  /* Reducir padding de secciones en mobile */
+  .section-lg  { padding-top: 3rem !important; padding-bottom: 3rem !important; }
+  .section-hero { min-height: 80vh !important; }
+
+  /* Hero: botones apilados y full-width */
+  .hero-btns {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .hero-btns a, .hero-btns button {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Tabla admin: ocultar columnas menos importantes en mobile */
+  .table-hide-mobile { display: none !important; }
+
+  /* Cards de stats: 2 columnas en mobile */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Botones del header admin: scroll horizontal */
+  .admin-header-btns {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    padding-bottom: 0.25rem;
+  }
+  .admin-header-btns > * { flex-shrink: 0; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   RESPONSIVE — mobile pequeño < 400 px
+─────────────────────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  .dest-grid {
+    grid-auto-rows: 110px;
+    gap: 0.5rem;
+  }
+  /* Steps "cómo funciona": 2 columnas en pantallas muy chicas */
+  .how-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 1.5rem !important;
+  }
+}
