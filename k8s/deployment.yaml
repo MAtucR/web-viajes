@@ -59,8 +59,13 @@ spec:
               done
               echo "PostgreSQL disponible ✅"
 
+        ## FIX: usa la misma imagen que el container principal.
+        ## Antes usaba una imagen con tag fijo ':migrate' que podía quedar
+        ## desactualizada y correr migraciones de una versión anterior.
+        ## Ahora se especifica el tag en el ConfigMap o directamente en CI/CD
+        ## con 'kubectl set image', igual que el container principal.
         - name: migrate
-          image: ghcr.io/matucr/web-viajes:migrate
+          image: ghcr.io/matucr/web-viajes:latest
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -78,7 +83,7 @@ spec:
 
       containers:
         - name: app
-          image: ghcr.io/matucr/web-viajes:sha-abaf0fc
+          image: ghcr.io/matucr/web-viajes:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -97,10 +102,12 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: NEXTAUTH_SECRET
-            ## NEXTAUTH_URL no es un secret — se define acá directamente.
-            ## Cambiá este valor si cambia el dominio/IP.
+            ## FIX: NEXTAUTH_URL debe ser https:// en producción.
+            ## Con http:// las cookies de sesión (Secure flag) no funcionan
+            ## correctamente y NextAuth puede rechazar callbacks.
+            ## Actualizá este valor si cambia el dominio.
             - name: NEXTAUTH_URL
-              value: "http://181.209.94.221"
+              value: "https://viajaconmoni.com"
             - name: PORT
               value: "3000"
             - name: HOSTNAME

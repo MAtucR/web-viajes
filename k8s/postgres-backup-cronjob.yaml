@@ -1,0 +1,99 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## postgres-backup-cronjob.yaml
+##
+## CronJob que hace pg_dump diario a las 3:00 AM (hora Argentina, UTC-3 → 06:00 UTC)
+## y guarda el backup en un volumen local.
+##
+## ⚠️  IMPORTANTE — local-path y single-node k3s:
+## El PVC de postgres usa local-path, que guarda datos en el disco del nodo.
+## Si el nodo se rompe físicamente, los datos se pierden.
+## Este CronJob es una primera capa de protección pero los backups también
+## están en el mismo disco. Para producción real, configurá un segundo destino
+## (S3, Backblaze B2, rclone a Google Drive, etc.) agregando un step adicional
+## en el script del CronJob.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres-backup
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres-backup
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  ## 06:00 UTC = 03:00 hora Argentina
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7   # conserva logs de los últimos 7 backups
+  failedJobsHistoryLimit:     3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key:  POSTGRES_PASSWORD
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key:  POSTGRES_USER
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key:  POSTGRES_DB
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  OUTFILE="/backups/${POSTGRES_DB}_${TIMESTAMP}.sql.gz"
+
+                  echo "▶ Iniciando backup: $OUTFILE"
+                  pg_dump \
+                    -h postgres-service \
+                    -U "$POSTGRES_USER" \
+                    -d "$POSTGRES_DB" \
+                    --no-password \
+                  | gzip > "$OUTFILE"
+
+                  echo "✅ Backup completado: $(du -sh $OUTFILE | cut -f1)"
+
+                  ## Rotar: conservar solo los últimos 30 archivos
+                  ls -t /backups/*.sql.gz | tail -n +31 | xargs -r rm --
+                  echo "🗑️  Archivos viejos eliminados. Total backups: $(ls /backups/*.sql.gz | wc -l)"
+              volumeMounts:
+                - name:      backup-storage
+                  mountPath: /backups
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: postgres-backup-pvc

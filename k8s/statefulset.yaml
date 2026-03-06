@@ -4,6 +4,12 @@
 ## ─────────────────────────────────────────────────────────────────────────────
 
 ## ── PersistentVolumeClaim ────────────────────────────────────────────────────
+## Los datos de PostgreSQL persisten en el disco del nodo gracias a este PVC.
+## El PVC sobrevive a reinicios del pod, re-deploys de la app y actualizaciones
+## del StatefulSet. Solo se pierden datos si:
+##   1. Se elimina manualmente el PVC (kubectl delete pvc postgres-pvc)
+##   2. Se elimina el nodo físico donde está montado el volumen local-path
+##      (riesgo real en single-node k3s — ver nota de backup más abajo)
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -21,6 +27,27 @@ spec:
   resources:
     requests:
       storage: 5Gi
+
+---
+
+## ── PodDisruptionBudget ──────────────────────────────────────────────────────
+## Evita que kubectl drain / actualizaciones del nodo maten el pod de postgres
+## sin respetar un período de gracia. Con minAvailable: 1, el nodo no puede
+## vaciarse a menos que haya otra réplica disponible (no aplica en single-node,
+## pero es buena práctica y no genera errores).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-pdb
+  namespace: viaja-con-moni
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: postgres
 
 ---
 
@@ -52,8 +79,6 @@ spec:
 
       ## local-path provisioner crea el directorio como root.
       ## El initContainer hace chown para que postgres (uid 999) pueda escribir.
-      ## El pod-level securityContext NO tiene runAsUser para que el initContainer
-      ## corra como root y pueda hacer chown.
       securityContext:
         fsGroup: 999
 
