@@ -9,7 +9,7 @@ function hashPassword(password: string): string {
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
-  pages: { signIn: '/login' },
+  pages:   { signIn: '/login' },
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -25,29 +25,42 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.password) return null;
-
-        // Verificar contraseña
         if (user.password !== hashPassword(credentials.password)) return null;
-
-        // Verificar que la cuenta esté activa (campo nuevo — default true para usuarios existentes)
         if (user.active === false) return null;
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role as string };
+        return {
+          id:        user.id,
+          email:     user.email,
+          name:      user.name,
+          role:      user.role as string,
+          avatarUrl: user.avatarUrl ?? undefined,
+          phone:     user.phone    ?? undefined,
+        };
       },
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
-        token.id   = user.id;
-        token.role = user.role;
+        token.id        = user.id;
+        token.role      = (user as any).role;
+        token.avatarUrl = (user as any).avatarUrl;
+        token.phone     = (user as any).phone;
+      }
+      // Permitir update de session (cuando el usuario edita su perfil)
+      if (trigger === 'update' && session) {
+        if (session.name)      token.name      = session.name;
+        if (session.avatarUrl !== undefined) token.avatarUrl = session.avatarUrl;
+        if (session.phone     !== undefined) token.phone     = session.phone;
       }
       return token;
     },
-    session({ session, token }) {
+    async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id   = token.id   ?? '';
-        (session.user as any).role = token.role ?? '';
+        (session.user as any).id        = token.id        ?? '';
+        (session.user as any).role      = token.role      ?? '';
+        (session.user as any).avatarUrl = token.avatarUrl ?? null;
+        (session.user as any).phone     = token.phone     ?? null;
       }
       return session;
     },
