@@ -19,10 +19,19 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email.toLowerCase().trim() },
+        });
+
         if (!user || !user.password) return null;
+
+        // Verificar contraseña
         if (user.password !== hashPassword(credentials.password)) return null;
-        // cast role (Prisma enum) to string so it matches the next-auth User type
+
+        // Verificar que la cuenta esté activa (campo nuevo — default true para usuarios existentes)
+        if (user.active === false) return null;
+
         return { id: user.id, email: user.email, name: user.name, role: user.role as string };
       },
     }),
@@ -37,8 +46,8 @@ export const authOptions: NextAuthOptions = {
     },
     session({ session, token }) {
       if (session.user) {
-        session.user.id   = token.id   ?? '';
-        session.user.role = token.role ?? '';
+        (session.user as any).id   = token.id   ?? '';
+        (session.user as any).role = token.role ?? '';
       }
       return session;
     },
