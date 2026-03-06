@@ -1,40 +1,58 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm]     = useState({ name: '', email: '', phone: '', password: '', confirm: '' });
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [error, setError]   = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+  // useRef en lugar de useState — evita re-renders por keystroke
+  // que en Android cierran el teclado virtual
+  const nameRef     = useRef<HTMLInputElement>(null);
+  const emailRef    = useRef<HTMLInputElement>(null);
+  const phoneRef    = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef  = useRef<HTMLInputElement>(null);
+
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [error,  setError]  = useState('');
 
   const handleSubmit = async () => {
+    const name     = nameRef.current?.value.trim()     ?? '';
+    const email    = emailRef.current?.value.trim()    ?? '';
+    const phone    = phoneRef.current?.value.trim()    ?? '';
+    const password = passwordRef.current?.value        ?? '';
+    const confirm  = confirmRef.current?.value         ?? '';
+
     setError('');
-    if (!form.name || !form.email || !form.password)
+
+    if (!name || !email || !password)
       return setError('Nombre, email y contraseña son obligatorios');
-    if (form.password !== form.confirm)
-      return setError('Las contraseñas no coinciden');
-    if (form.password.length < 6)
+    if (!email.includes('@'))
+      return setError('Email inválido');
+    if (password.length < 6)
       return setError('La contraseña debe tener al menos 6 caracteres');
+    if (password !== confirm)
+      return setError('Las contraseñas no coinciden');
 
     setStatus('loading');
-    const res = await fetch('/api/auth/register', {
+
+    const res  = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, password: form.password }),
+      body: JSON.stringify({ name, email, phone: phone || undefined, password }),
     });
     const data = await res.json();
-    if (!res.ok) { setError(data.error || 'Error al registrarse'); setStatus('error'); return; }
 
-    // Auto login after register
-    const login = await signIn('credentials', {
-      email: form.email, password: form.password, redirect: false,
-    });
+    if (!res.ok) {
+      setError(data.error || 'Error al registrarse');
+      setStatus('error');
+      return;
+    }
+
+    // Auto-login después del registro
+    const login = await signIn('credentials', { email, password, redirect: false });
     if (login?.ok) router.push('/mi-perfil');
     else { setStatus('idle'); router.push('/login'); }
   };
@@ -51,24 +69,24 @@ export default function RegisterPage() {
         </div>
 
         <div className="form-group">
-          <label>Nombre completo *</label>
-          <input name="name" value={form.name} onChange={handleChange} placeholder="Tu nombre" autoComplete="name" />
+          <label htmlFor="reg-name">Nombre completo *</label>
+          <input id="reg-name" ref={nameRef} type="text" placeholder="Tu nombre" autoComplete="name" defaultValue="" />
         </div>
         <div className="form-group">
-          <label>Email *</label>
-          <input name="email" type="email" value={form.email} onChange={handleChange} placeholder="tu@email.com" autoComplete="email" />
+          <label htmlFor="reg-email">Email *</label>
+          <input id="reg-email" ref={emailRef} type="email" placeholder="tu@email.com" autoComplete="email" inputMode="email" defaultValue="" />
         </div>
         <div className="form-group">
-          <label>Teléfono / WhatsApp</label>
-          <input name="phone" value={form.phone} onChange={handleChange} placeholder="+54 9 11 1234-5678" />
+          <label htmlFor="reg-phone">Teléfono / WhatsApp</label>
+          <input id="reg-phone" ref={phoneRef} type="tel" placeholder="+54 9 11 1234-5678" autoComplete="tel" inputMode="tel" defaultValue="" />
         </div>
         <div className="form-group">
-          <label>Contraseña *</label>
-          <input name="password" type="password" value={form.password} onChange={handleChange} placeholder="Mínimo 6 caracteres" autoComplete="new-password" />
+          <label htmlFor="reg-password">Contraseña *</label>
+          <input id="reg-password" ref={passwordRef} type="password" placeholder="Mínimo 6 caracteres" autoComplete="new-password" defaultValue="" />
         </div>
         <div className="form-group">
-          <label>Repetir contraseña *</label>
-          <input name="confirm" type="password" value={form.confirm} onChange={handleChange} placeholder="Repetí la contraseña" autoComplete="new-password" />
+          <label htmlFor="reg-confirm">Repetir contraseña *</label>
+          <input id="reg-confirm" ref={confirmRef} type="password" placeholder="Repetí la contraseña" autoComplete="new-password" defaultValue="" />
         </div>
 
         {error && (
@@ -81,7 +99,7 @@ export default function RegisterPage() {
           onClick={handleSubmit}
           disabled={status === 'loading'}
           style={{ width: '100%', background: status === 'loading' ? '#94a3b8' : 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', border: 'none', borderRadius: '0.75rem', padding: '0.9rem', fontWeight: 700, fontSize: '1rem', cursor: status === 'loading' ? 'not-allowed' : 'pointer', marginBottom: '1.25rem' }}>
-          {status === 'loading' ? 'Creando cuenta...' : '🚀 Crear cuenta'}
+          {status === 'loading' ? '⏳ Creando cuenta...' : '🚀 Crear cuenta'}
         </button>
 
         <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.875rem' }}>
