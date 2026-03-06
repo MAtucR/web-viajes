@@ -3,12 +3,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user as any).role !== 'ADMIN') return new NextResponse('Unauthorized', { status: 401 });
+  if (!session || (session.user as any).role !== 'ADMIN')
+    return new NextResponse('Unauthorized', { status: 401 });
+
+  const { id } = await params;
 
   const trip = await prisma.trip.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { enrollments: { orderBy: { createdAt: 'desc' } } },
   });
   if (!trip) return new NextResponse('Not found', { status: 404 });
@@ -21,7 +27,10 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     ]),
   ];
 
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows
+    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
