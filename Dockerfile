@@ -28,15 +28,30 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
-# next-auth v4 requiere NEXTAUTH_SECRET en NODE_ENV=production, incluso en build time.
-# El valor real se inyecta en runtime vía k8s secret — este es solo un placeholder de build.
 ENV NEXTAUTH_SECRET="build-time-placeholder-overridden-at-runtime"
 ENV NEXTAUTH_URL="http://localhost:3000"
 
 RUN npm run build
 
 # ─────────────────────────────────────────────
-# Stage 3: runner
+# Stage 3: migrator
+# Imagen liviana que solo corre `prisma migrate deploy`.
+# Usada por el initContainer de k8s. Incluye la CLI de prisma.
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS migrator
+
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/prisma       ./prisma
+COPY package.json ./
+
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
+# ─────────────────────────────────────────────
+# Stage 4: runner
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
@@ -58,11 +73,7 @@ COPY --from=builder /app/.next/static     ./.next/static
 # Prisma client (query engine) para runtime de la app
 COPY --from=deps /app/node_modules/.prisma  ./node_modules/.prisma
 COPY --from=deps /app/node_modules/@prisma  ./node_modules/@prisma
-# prisma/schema para que el client encuentre los modelos
 COPY --from=deps /app/prisma                ./prisma
-
-# La migración la corre un initContainer en k8s usando la imagen de deps.
-# El runner NO necesita la CLI de prisma, solo el client.
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
