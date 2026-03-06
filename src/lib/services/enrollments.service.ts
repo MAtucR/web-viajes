@@ -4,6 +4,9 @@
  */
 import { prisma } from '@/lib/prisma';
 
+/** Regex básica para validar email */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export type CreateEnrollmentInput = {
   tripId:   string;
   name:     string;
@@ -20,24 +23,41 @@ export async function createEnrollment(input: CreateEnrollmentInput): Promise<
 > {
   const { tripId, name, email, phone, message } = input;
 
-  const trip = await prisma.trip.findUnique({ where: { id: tripId, published: true } });
-  if (!trip) return { ok: false, error: 'TRIP_NOT_FOUND', message: 'Viaje no encontrado' };
+  // Validación de email más robusta
+  if (!EMAIL_RE.test(email)) return { ok: false, error: 'INTERNAL', message: 'Email inválido' };
 
-  // Verificar cupos
-  if (trip.maxSpots) {
-    const count = await prisma.enrollment.count({ where: { tripId } });
-    if (count >= trip.maxSpots) return { ok: false, error: 'TRIP_FULL', message: 'Sin lugares disponibles' };
+  /**
+   * Verificación de cupos y duplicados dentro de una transacción serializable
+   * para evitar la race condition donde dos requests simultáneos superan el
+   * chequeo de maxSpots y crean dos inscripciones en el último lugar.
+   */
+  try {
+    const enrollment = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id: tripId, published: true } });
+      if (!trip) throw Object.assign(new Error('Viaje no encontrado'), { code: 'TRIP_NOT_FOUND' });
+
+      if (trip.maxSpots) {
+        const count = await tx.enrollment.count({ where: { tripId } });
+        if (count >= trip.maxSpots)
+          throw Object.assign(new Error('Sin lugares disponibles'), { code: 'TRIP_FULL' });
+      }
+
+      const existing = await tx.enrollment.findFirst({ where: { tripId, email } });
+      if (existing)
+        throw Object.assign(new Error('Ya estás inscripto en este viaje'), { code: 'ALREADY_ENROLLED' });
+
+      return tx.enrollment.create({
+        data: { tripId, name, email, phone, message },
+      });
+    }, { isolationLevel: 'Serializable' });
+
+    return { ok: true, data: enrollment };
+  } catch (err: any) {
+    const code: EnrollmentError = ['TRIP_NOT_FOUND', 'TRIP_FULL', 'ALREADY_ENROLLED'].includes(err.code)
+      ? err.code
+      : 'INTERNAL';
+    return { ok: false, error: code, message: err.message ?? 'Error interno' };
   }
-
-  // Evitar doble inscripción en el mismo viaje
-  const existing = await prisma.enrollment.findFirst({ where: { tripId, email } });
-  if (existing) return { ok: false, error: 'ALREADY_ENROLLED', message: 'Ya estás inscripto en este viaje' };
-
-  const enrollment = await prisma.enrollment.create({
-    data: { tripId, name, email, phone, message },
-  });
-
-  return { ok: true, data: enrollment };
 }
 
 export async function getEnrollmentsByTrip(tripId: string) {

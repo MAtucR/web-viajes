@@ -27,22 +27,33 @@ export async function PATCH(req: NextRequest) {
   if (!session || (session.user as any).role !== 'ADMIN')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id, role, active } = await req.json();
+  let body: any;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 }); }
+
+  const { id, role, active } = body;
   if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
+
+  if (role === undefined && active === undefined)
+    return NextResponse.json({ error: 'No se enviaron campos para actualizar' }, { status: 400 });
 
   // No permitir que el admin se quite a sí mismo
   const me = await prisma.user.findUnique({ where: { email: (session.user as any).email } });
   if (me?.id === id && role && role !== 'ADMIN')
     return NextResponse.json({ error: 'No podés cambiar tu propio rol de ADMIN' }, { status: 403 });
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: {
-      ...(role   !== undefined ? { role }   : {}),
-      ...(active !== undefined ? { active } : {}),
-    },
-    select: { id: true, name: true, email: true, role: true, active: true },
-  });
-
-  return NextResponse.json(user);
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(role   !== undefined ? { role }   : {}),
+        ...(active !== undefined ? { active } : {}),
+      },
+      select: { id: true, name: true, email: true, role: true, active: true },
+    });
+    return NextResponse.json(user);
+  } catch (err: any) {
+    if (err?.code === 'P2025')
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
+    throw err;
+  }
 }

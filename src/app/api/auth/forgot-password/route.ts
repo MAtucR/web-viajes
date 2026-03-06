@@ -3,18 +3,21 @@ import { prisma } from '@/lib/prisma';
 import { sendPasswordReset } from '@/lib/email';
 import { randomBytes } from 'crypto';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function POST(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 }); }
 
   const email = (body.email ?? '').toLowerCase().trim();
-  if (!email || !email.includes('@')) return NextResponse.json({ error: 'Email inválido' }, { status: 400 });
+  if (!email || !EMAIL_RE.test(email))
+    return NextResponse.json({ error: 'Email inválido' }, { status: 400 });
 
   // Siempre responder con éxito para no revelar si el usuario existe
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.password) return NextResponse.json({ ok: true }); // no revelar
+  if (!user || !user.password) return NextResponse.json({ ok: true });
 
-  // Invalidar tokens anteriores
+  // Invalidar tokens anteriores sin usar
   await prisma.passwordResetToken.updateMany({
     where: { userId: user.id, used: false },
     data:  { used: true },

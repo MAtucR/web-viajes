@@ -13,14 +13,13 @@ export async function PATCH(req: NextRequest) {
 
   const { name, phone, avatarUrl } = body;
 
-  // Validaciones básicas
   if (name !== undefined && (typeof name !== 'string' || name.trim().length < 2))
     return NextResponse.json({ error: 'Nombre inválido (mínimo 2 caracteres)' }, { status: 400 });
 
-  // avatarUrl puede ser: URL https://, data:image/..., o '' (vacío para borrar)
+  // Solo se aceptan HTTPS o data:image/ — se rechaza http:// para evitar mixed content
   if (avatarUrl !== undefined && avatarUrl !== '' && typeof avatarUrl === 'string') {
-    if (!avatarUrl.startsWith('https://') && !avatarUrl.startsWith('http://') && !avatarUrl.startsWith('data:image/'))
-      return NextResponse.json({ error: 'URL de avatar inválida' }, { status: 400 });
+    if (!avatarUrl.startsWith('https://') && !avatarUrl.startsWith('data:image/'))
+      return NextResponse.json({ error: 'URL de avatar inválida (debe ser https:// o data:image/)' }, { status: 400 });
     // Limitar base64 a ~500KB
     if (avatarUrl.startsWith('data:image/') && avatarUrl.length > 700_000)
       return NextResponse.json({ error: 'La imagen es demasiado grande (máx 500KB)' }, { status: 400 });
