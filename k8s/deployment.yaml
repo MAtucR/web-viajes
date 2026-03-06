@@ -60,7 +60,6 @@ spec:
               echo "PostgreSQL disponible ✅"
 
         - name: migrate
-          ## Imagen dedicada con la CLI de prisma — NO la imagen del runner
           image: ghcr.io/matucr/web-viajes:migrate
           imagePullPolicy: Always
           command:
@@ -99,7 +98,10 @@ spec:
                   name: app-secret
                   key: NEXTAUTH_SECRET
             - name: NEXTAUTH_URL
-              value: "https://viajaconmoni.com"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: NEXTAUTH_URL
             - name: PORT
               value: "3000"
             - name: HOSTNAME
