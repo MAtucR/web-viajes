@@ -1,9 +1,20 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { formatDate, formatPrice, whatsappLink } from '@/lib/utils';
+import { whatsappLink } from '@/lib/utils';
+import { DESTINATIONS } from '@/lib/destinations';
 import TripCard from '@/components/TripCard';
 
 export const dynamic = 'force-dynamic';
+
+// Los 6 destinos destacados en la sección Inspirate
+const FEATURED_DESTINATIONS = [
+  'Patagonia',
+  'Iguazú',
+  'Bariloche',
+  'Europa',
+  'Caribe',
+  'Brasil',
+].map(name => DESTINATIONS.find(d => d.name === name)!).filter(Boolean);
 
 export default async function HomePage() {
   let featuredTrips: any[] = [];
@@ -53,10 +64,10 @@ export default async function HomePage() {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: '2rem', textAlign: 'center' }}>
             {[
-              { value: '500+', label: 'Viajeros felices', icon: '😊' },
-              { value: '50+',  label: 'Destinos',         icon: '🌍' },
-              { value: '10+',  label: 'Años de experiencia', icon: '🏆' },
-              { value: '100%', label: 'Atención personalizada', icon: '🤝' },
+              { value: '500+', label: 'Viajeros felices',      icon: '😊' },
+              { value: '50+',  label: 'Destinos',              icon: '🌍' },
+              { value: '10+',  label: 'Años de experiencia',   icon: '🏆' },
+              { value: '100%', label: 'Atención personalizada',icon: '🤝' },
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontSize: '1.8rem', marginBottom: '0.25rem' }}>{s.icon}</div>
@@ -78,9 +89,7 @@ export default async function HomePage() {
               <p style={{ color: '#64748b', maxWidth: '480px', margin: '0 auto' }}>Reservá tu lugar antes de que se agoten los cupos</p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.75rem' }}>
-              {featuredTrips.map(trip => (
-                <TripCard key={trip.id} trip={trip} />
-              ))}
+              {featuredTrips.map(trip => <TripCard key={trip.id} trip={trip} />)}
             </div>
             <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
               <Link href="/trips" className="btn-primary" style={{ fontSize: '1rem', padding: '0.9rem 2.5rem' }}>
@@ -91,7 +100,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Destinos populares ── */}
+      {/* ── Destinos populares (INSPIRATE) — fotos del catálogo centralizado ── */}
       <section style={{ padding: '5rem 1.5rem', background: 'white' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
@@ -99,21 +108,16 @@ export default async function HomePage() {
             <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>Destinos que te van a enamorar</h2>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px,1fr))', gap: '1.25rem' }}>
-            {[
-              { name: 'Patagonia',  img: 'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=500&q=80', tag: 'Nacional' },
-              { name: 'Iguazú',    img: 'https://images.unsplash.com/photo-1601000938259-f63b5c1a99a9?w=500&q=80', tag: 'Nacional' },
-              { name: 'Bariloche', img: 'https://images.unsplash.com/photo-1587595431973-160d0d94add1?w=500&q=80', tag: 'Nacional' },
-              { name: 'Europa',    img: 'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=500&q=80', tag: 'Internacional' },
-              { name: 'Caribe',    img: 'https://images.unsplash.com/photo-1506953823976-52e1fdc0149a?w=500&q=80', tag: 'Internacional' },
-              { name: 'Brasil',    img: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=500&q=80', tag: 'Internacional' },
-            ].map(dest => (
+            {FEATURED_DESTINATIONS.map(dest => (
               <Link key={dest.name} href="/trips" className="dest-card"
-                style={{ position: 'relative', height: '180px', borderRadius: '1rem', overflow: 'hidden', display: 'block', textDecoration: 'none' }}>
-                <img src={dest.img} alt={dest.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 55%)' }} />
+                style={{ position: 'relative', height: '200px', borderRadius: '1rem', overflow: 'hidden', display: 'block', textDecoration: 'none' }}>
+                <img src={dest.image} alt={dest.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.68) 0%, transparent 55%)' }} />
                 <div style={{ position: 'absolute', bottom: '0.9rem', left: '1rem' }}>
-                  <div style={{ color: 'white', fontWeight: 800, fontSize: '1.05rem' }}>{dest.name}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem' }}>{dest.tag}</div>
+                  <div style={{ color: 'white', fontWeight: 800, fontSize: '1.1rem' }}>
+                    {dest.emoji} {dest.name}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{dest.region}</div>
                 </div>
               </Link>
             ))}
