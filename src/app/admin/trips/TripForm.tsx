@@ -4,24 +4,17 @@ import { useRouter } from 'next/navigation';
 import { DESTINATIONS, DEFAULT_IMAGE, getTripImage } from '@/lib/destinations';
 
 type TripData = {
-  id?: string;
-  title?: string;
-  destination?: string;
-  startDate?: string;
-  endDate?: string;
-  description?: string;
-  price?: number | null;
-  maxSpots?: number | null;
-  imageUrl?: string | null;
-  whatsappMsg?: string | null;
-  published?: boolean;
+  id?: string; title?: string; destination?: string; startDate?: string; endDate?: string;
+  description?: string; price?: number | null; maxSpots?: number | null;
+  imageUrl?: string | null; whatsappMsg?: string | null; published?: boolean;
 };
 
-const nationals = DESTINATIONS.filter(d => d.region === 'Nacional');
+const nationals      = DESTINATIONS.filter(d => d.region === 'Nacional');
 const internationals = DESTINATIONS.filter(d => d.region === 'Internacional');
 
 export default function TripForm({ trip }: { trip?: TripData }) {
   const router  = useRouter();
+  const isNew   = !trip?.id;
   const [form, setForm] = useState({
     title:       trip?.title       ?? '',
     destination: trip?.destination ?? '',
@@ -32,14 +25,13 @@ export default function TripForm({ trip }: { trip?: TripData }) {
     maxSpots:    trip?.maxSpots?.toString() ?? '',
     imageUrl:    trip?.imageUrl    ?? '',
     whatsappMsg: trip?.whatsappMsg ?? '',
-    published:   trip?.published   ?? false,
+    // ✅ FIX: nuevos viajes quedan publicados por defecto
+    published:   trip?.published   ?? true,
   });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
-  // Preview de imagen: custom > catálogo > fallback
   const previewImg = form.imageUrl || getTripImage({ imageUrl: null, title: form.title, destination: form.destination });
-
   const set = (key: string, value: any) => setForm(p => ({ ...p, [key]: value }));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -47,22 +39,14 @@ export default function TripForm({ trip }: { trip?: TripData }) {
     set(name, type === 'checkbox' ? (e.target as HTMLInputElement).checked : value);
   };
 
-  // Al elegir un destino del selector: completa el campo y limpia imageUrl
-  const handleDestinationSelect = (destName: string) => {
-    set('destination', destName);
-    set('imageUrl', '');   // usar la imagen del catálogo automáticamente
-  };
+  const handleDestinationSelect = (destName: string) => { set('destination', destName); set('imageUrl', ''); };
 
   const handleSubmit = async () => {
     if (!form.title || !form.destination || !form.startDate || !form.endDate) {
       setError('Título, destino y fechas son requeridos'); return;
     }
     setLoading(true); setError('');
-    const body = {
-      ...form,
-      price:    form.price    ? parseFloat(form.price)  : null,
-      maxSpots: form.maxSpots ? parseInt(form.maxSpots) : null,
-    };
+    const body = { ...form, price: form.price ? parseFloat(form.price) : null, maxSpots: form.maxSpots ? parseInt(form.maxSpots) : null };
     const url    = trip?.id ? `/api/admin/trips/${trip.id}` : '/api/admin/trips';
     const method = trip?.id ? 'PUT' : 'POST';
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -75,8 +59,7 @@ export default function TripForm({ trip }: { trip?: TripData }) {
   const handleDelete = async () => {
     if (!trip?.id || !confirm('¿Seguro que querés eliminar este viaje?')) return;
     await fetch(`/api/admin/trips/${trip.id}`, { method: 'DELETE' });
-    router.push('/admin');
-    router.refresh();
+    router.push('/admin'); router.refresh();
   };
 
   return (
@@ -84,8 +67,7 @@ export default function TripForm({ trip }: { trip?: TripData }) {
 
       {/* Preview imagen */}
       <div style={{ marginBottom: '1.5rem', borderRadius: '0.75rem', overflow: 'hidden', height: '180px', position: 'relative' }}>
-        <img src={previewImg} alt="Preview destino"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img src={previewImg} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)' }} />
         <div style={{ position: 'absolute', bottom: '0.75rem', left: '1rem', color: 'white', fontWeight: 700 }}>
           {form.destination || 'Vista previa del destino'}
@@ -97,37 +79,45 @@ export default function TripForm({ trip }: { trip?: TripData }) {
         )}
       </div>
 
+      {/* Estado de publicación — MUY VISIBLE arriba del formulario */}
+      <div style={{ marginBottom: '1.5rem', borderRadius: '0.875rem', padding: '1rem 1.25rem', border: `2px solid ${form.published ? '#10b981' : '#f59e0b'}`, background: form.published ? '#f0fdf4' : '#fffbeb', display: 'flex', alignItems: 'center', gap: '0.875rem', cursor: 'pointer' }}
+        onClick={() => set('published', !form.published)}>
+        <div style={{ fontSize: '1.4rem' }}>{form.published ? '🟢' : '🟡'}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, color: form.published ? '#065f46' : '#92400e' }}>
+            {form.published ? 'Publicado — visible en el sitio' : 'Borrador — no visible en el sitio'}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: form.published ? '#059669' : '#b45309', marginTop: '0.1rem' }}>
+            {form.published ? 'Los visitantes pueden ver y anotarse a este viaje.' : 'Solo vos podés verlo en el panel. Activalo para publicarlo.'}
+          </div>
+        </div>
+        <input type="checkbox" name="published" checked={form.published} onChange={handleChange}
+          style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer', accentColor: '#10b981' }} />
+      </div>
+
       {/* Título */}
       <div className="form-group">
         <label>Título *</label>
         <input name="title" type="text" value={form.title} onChange={handleChange} placeholder="Bariloche Invierno 2025" />
       </div>
 
-      {/* Selector de destino */}
+      {/* Selector destino */}
       <div className="form-group">
         <label>Destino *</label>
         <select name="destination" value={form.destination}
           onChange={e => handleDestinationSelect(e.target.value)}
-          style={{ width: '100%', padding: '0.65rem 0.9rem', borderRadius: '0.6rem', border: '1.5px solid #e2e8f0', fontSize: '0.95rem', background: 'white', cursor: 'pointer', appearance: 'auto' }}>
+          style={{ width: '100%', padding: '0.65rem 0.9rem', borderRadius: '0.6rem', border: '1.5px solid #e2e8f0', fontSize: '0.95rem', background: 'white', cursor: 'pointer' }}>
           <option value="">— Elegí un destino —</option>
           <optgroup label="🇦🇷 Argentina — Nacional">
-            {nationals.map(d => (
-              <option key={d.name} value={d.name}>{d.emoji} {d.name}</option>
-            ))}
+            {nationals.map(d => <option key={d.name} value={d.name}>{d.emoji} {d.name}</option>)}
           </optgroup>
           <optgroup label="🌍 Internacional">
-            {internationals.map(d => (
-              <option key={d.name} value={d.name}>{d.emoji} {d.name}</option>
-            ))}
+            {internationals.map(d => <option key={d.name} value={d.name}>{d.emoji} {d.name}</option>)}
           </optgroup>
         </select>
-        {/* Campo libre para destinos custom no en la lista */}
         <input name="destination" type="text" value={form.destination} onChange={handleChange}
-          placeholder="O escribí el destino manualmente..."
-          style={{ marginTop: '0.5rem' }} />
-        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem' }}>
-          Elegí de la lista para usar la foto automática, o escribí uno personalizado.
-        </p>
+          placeholder="O escribí el destino manualmente..." style={{ marginTop: '0.5rem' }} />
+        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem' }}>Elegí de la lista para foto automática, o escribí uno personalizado.</p>
       </div>
 
       {/* Fechas */}
@@ -160,14 +150,14 @@ export default function TripForm({ trip }: { trip?: TripData }) {
         </div>
       </div>
 
-      {/* Imagen personalizada (opcional) */}
+      {/* Imagen custom */}
       <div className="form-group">
-        <label>URL de imagen personalizada <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional — sobreescribe la automática)</span></label>
+        <label>URL de imagen personalizada <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></label>
         <input name="imageUrl" type="text" value={form.imageUrl} onChange={handleChange} placeholder="https://images.unsplash.com/..." />
         {form.imageUrl && (
           <button type="button" onClick={() => set('imageUrl', '')}
             style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: '#dc2626', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>
-            ✕ Quitar imagen personalizada (usar la automática)
+            ✕ Quitar (usar imagen automática del catálogo)
           </button>
         )}
       </div>
@@ -179,16 +169,7 @@ export default function TripForm({ trip }: { trip?: TripData }) {
           placeholder={`¡Hola! Me interesa el viaje a ${form.destination || '...'}`} />
       </div>
 
-      {/* Publicar */}
-      <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <input name="published" id="published" type="checkbox" checked={form.published}
-          onChange={handleChange} style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }} />
-        <label htmlFor="published" style={{ margin: 0, cursor: 'pointer', fontWeight: 500 }}>
-          Publicar viaje (visible en la web)
-        </label>
-      </div>
-
-      {error && <p style={{ color: '#dc2626', marginBottom: '1rem' }}>{error}</p>}
+      {error && <p style={{ color: '#dc2626', marginBottom: '1rem', fontWeight: 500 }}>⚠️ {error}</p>}
 
       <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between' }}>
         <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
