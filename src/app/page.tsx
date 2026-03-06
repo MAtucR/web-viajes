@@ -6,7 +6,6 @@ import TripCard from '@/components/TripCard';
 
 export const dynamic = 'force-dynamic';
 
-// Los 6 destinos destacados en la sección Inspirate
 const FEATURED_DESTINATIONS = [
   'Patagonia',
   'Iguazú',
@@ -14,6 +13,8 @@ const FEATURED_DESTINATIONS = [
   'Europa',
   'Caribe',
   'Brasil',
+  'Perú',
+  'México',
 ].map(name => DESTINATIONS.find(d => d.name === name)!).filter(Boolean);
 
 export default async function HomePage() {
@@ -28,6 +29,7 @@ export default async function HomePage() {
 
   return (
     <div>
+
       {/* ── Hero ── */}
       <section style={{ position: 'relative', minHeight: '92vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1600&q=85)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
@@ -64,10 +66,10 @@ export default async function HomePage() {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: '2rem', textAlign: 'center' }}>
             {[
-              { value: '500+', label: 'Viajeros felices',      icon: '😊' },
-              { value: '50+',  label: 'Destinos',              icon: '🌍' },
-              { value: '10+',  label: 'Años de experiencia',   icon: '🏆' },
-              { value: '100%', label: 'Atención personalizada',icon: '🤝' },
+              { value: '500+', label: 'Viajeros felices',       icon: '😊' },
+              { value: '50+',  label: 'Destinos',               icon: '🌍' },
+              { value: '10+',  label: 'Años de experiencia',    icon: '🏆' },
+              { value: '100%', label: 'Atención personalizada', icon: '🤝' },
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontSize: '1.8rem', marginBottom: '0.25rem' }}>{s.icon}</div>
@@ -100,25 +102,74 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Destinos populares (INSPIRATE) — fotos del catálogo centralizado ── */}
+      {/* ── Cómo funciona ── */}
       <section style={{ padding: '5rem 1.5rem', background: 'white' }}>
+        <div className="container">
+          <div style={{ textAlign: 'center', marginBottom: '3.5rem' }}>
+            <div style={{ color: '#667eea', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>SIMPLE Y RÁPIDO</div>
+            <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>¿Cómo reservar tu viaje?</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '2.5rem', position: 'relative' }}>
+            {[
+              { step: '01', icon: '🗺️', title: 'Elegís el destino', desc: 'Explorá los viajes disponibles y encontrá el que más te guste.' },
+              { step: '02', icon: '📝', title: 'Completás el formulario', desc: 'Dejás tus datos en pocos segundos. Sin complicaciones.' },
+              { step: '03', icon: '💬', title: 'Moni te contacta', desc: 'Te confirmamos el lugar y coordinamos todos los detalles por WhatsApp.' },
+              { step: '04', icon: '🎒', title: '¡A viajar!', desc: 'Solo queda hacer las valijas y disfrutar el viaje de tu vida.' },
+            ].map((item, i) => (
+              <div key={item.step} style={{ textAlign: 'center', position: 'relative' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', margin: '0 auto 1.25rem', boxShadow: '0 4px 16px rgba(102,126,234,0.35)' }}>
+                  {item.icon}
+                </div>
+                <div style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(calc(-50% + 40px))', background: '#667eea', color: 'white', fontSize: '0.65rem', fontWeight: 800, borderRadius: '999px', padding: '0.15rem 0.45rem', letterSpacing: '0.05em' }}>
+                  {item.step}
+                </div>
+                <h3 style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.5rem' }}>{item.title}</h3>
+                <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6 }}>{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Destinos populares (INSPIRATE) ── */}
+      <section style={{ padding: '5rem 1.5rem', background: '#f8fafc' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
             <div style={{ color: '#667eea', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>INSPIRATE</div>
             <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>Destinos que te van a enamorar</h2>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px,1fr))', gap: '1.25rem' }}>
-            {FEATURED_DESTINATIONS.map(dest => (
+
+          {/* Grid principal — 8 destinos en layout tipo mosaico */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 200px)', gap: '0.75rem' }}>
+            {FEATURED_DESTINATIONS.map((dest, i) => (
               <Link key={dest.name} href="/trips" className="dest-card"
-                style={{ position: 'relative', height: '200px', borderRadius: '1rem', overflow: 'hidden', display: 'block', textDecoration: 'none' }}>
-                <img src={dest.image} alt={dest.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.68) 0%, transparent 55%)' }} />
+                style={{
+                  position: 'relative',
+                  borderRadius: '1rem',
+                  overflow: 'hidden',
+                  display: 'block',
+                  textDecoration: 'none',
+                  // primer y quinto item ocupan 2 columnas para romper la grilla
+                  gridColumn: (i === 0 || i === 5) ? 'span 2' : 'span 1',
+                }}>
+                <img src={dest.image} alt={dest.name} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s ease' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 55%)' }} />
                 <div style={{ position: 'absolute', bottom: '0.9rem', left: '1rem' }}>
-                  <div style={{ color: 'white', fontWeight: 800, fontSize: '1.1rem' }}>
+                  <div style={{ color: 'white', fontWeight: 800, fontSize: '1.05rem', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
                     {dest.emoji} {dest.name}
                   </div>
-                  <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{dest.region}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.72rem', marginTop: '0.1rem' }}>{dest.region}</div>
                 </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Chips de destinos adicionales */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', justifyContent: 'center', marginTop: '1.75rem' }}>
+            {['Tandil 🪨','Ushuaia 🚢','Mendoza 🍷','Córdoba 🌿','Salta 🏜️','Colombia 🌺','Chile 🌄','Uruguay 🏄','México 🌮','EE.UU 🗽'].map(chip => (
+              <Link key={chip} href="/trips"
+                style={{ background: 'white', border: '1.5px solid #e2e8f0', borderRadius: '999px', padding: '0.4rem 1rem', fontSize: '0.82rem', fontWeight: 600, color: '#374151', textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                {chip}
               </Link>
             ))}
           </div>
@@ -150,7 +201,7 @@ export default async function HomePage() {
       </section>
 
       {/* ── Testimonios ── */}
-      <section style={{ padding: '5rem 1.5rem', background: '#f8fafc' }}>
+      <section style={{ padding: '5rem 1.5rem', background: 'white' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
             <div style={{ color: '#667eea', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>TESTIMONIOS</div>
@@ -158,25 +209,43 @@ export default async function HomePage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px,1fr))', gap: '1.5rem' }}>
             {[
-              { name: 'Laura M.',     dest: 'Bariloche 2024', text: '¡Fue el viaje de mi vida! La organización fue impecable, cada detalle pensado. Ya estoy reservando el próximo.' },
-              { name: 'Carlos G.',    dest: 'Europa 2024',    text: 'Moni es una crack. Nos llevó por 5 países sin ningún problema. El grupo era genial, volví con amigos nuevos.' },
-              { name: 'Valentina R.', dest: 'Iguazú 2023',   text: 'Primera vez que viajaba en grupo y quedé encantada. La atención fue increíble de principio a fin.' },
+              { name: 'Laura M.',     dest: 'Bariloche 2024', text: '¡Fue el viaje de mi vida! La organización fue impecable, cada detalle pensado. Ya estoy reservando el próximo.', color: '#667eea' },
+              { name: 'Carlos G.',    dest: 'Europa 2024',    text: 'Moni es una crack. Nos llevó por 5 países sin ningún problema. El grupo era genial, volví con amigos nuevos.', color: '#764ba2' },
+              { name: 'Valentina R.', dest: 'Iguazú 2024',   text: 'Primera vez que viajaba en grupo y quedé encantada. La atención fue increíble de principio a fin.', color: '#06b6d4' },
             ].map(t => (
-              <div key={t.name} style={{ background: 'white', borderRadius: '1rem', padding: '1.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                <div style={{ color: '#fbbf24', fontSize: '1.1rem', marginBottom: '0.75rem' }}>★★★★★</div>
-                <p style={{ color: '#374151', lineHeight: 1.65, marginBottom: '1.25rem', fontStyle: 'italic' }}>"{t.text}"</p>
+              <div key={t.name} style={{ background: '#f8fafc', borderRadius: '1.25rem', padding: '1.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', position: 'relative' }}>
+                <div style={{ fontSize: '3rem', color: t.color, lineHeight: 1, marginBottom: '0.5rem', opacity: 0.25, position: 'absolute', top: '1rem', right: '1.25rem', fontFamily: 'Georgia, serif' }}>&ldquo;</div>
+                <div style={{ color: '#fbbf24', fontSize: '1rem', marginBottom: '0.75rem' }}>★★★★★</div>
+                <p style={{ color: '#374151', lineHeight: 1.7, marginBottom: '1.25rem', fontSize: '0.93rem' }}>{t.text}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: `linear-gradient(135deg, ${t.color}, #764ba2)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>
                     {t.name.charAt(0)}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{t.name}</div>
-                    <div style={{ color: '#667eea', fontSize: '0.78rem' }}>{t.dest}</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{t.name}</div>
+                    <div style={{ color: t.color, fontSize: '0.78rem', fontWeight: 600 }}>{t.dest}</div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Banner WhatsApp flotante ── */}
+      <section style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', borderBottom: '1px solid #bbf7d0', padding: '1.5rem' }}>
+        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '2rem' }}>💬</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#15803d' }}>¿Tenés dudas? Escribinos ahora</div>
+              <div style={{ fontSize: '0.85rem', color: '#166534' }}>Respondemos en minutos todos los días</div>
+            </div>
+          </div>
+          <a href={whatsappLink('Hola! Quiero consultar sobre un viaje 🌍')} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#25D366', color: 'white', padding: '0.7rem 1.5rem', borderRadius: '0.65rem', fontWeight: 700, fontSize: '0.95rem', boxShadow: '0 2px 10px rgba(37,211,102,0.3)', whiteSpace: 'nowrap' }}>
+            Escribinos por WhatsApp ↗
+          </a>
         </div>
       </section>
 
@@ -220,6 +289,14 @@ export default async function HomePage() {
               {[['/', 'Inicio'], ['/trips', 'Viajes'], ['/register', 'Crear cuenta'], ['/login', 'Ingresar']].map(([href, label]) => (
                 <div key={href} style={{ marginBottom: '0.4rem' }}>
                   <Link href={href} style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{label}</Link>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ color: 'white', fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Destinos populares</div>
+              {['Bariloche', 'Patagonia', 'Iguazú', 'Europa', 'Caribe', 'Brasil'].map(d => (
+                <div key={d} style={{ marginBottom: '0.4rem' }}>
+                  <Link href="/trips" style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{d}</Link>
                 </div>
               ))}
             </div>
