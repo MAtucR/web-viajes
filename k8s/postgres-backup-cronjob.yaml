@@ -2,39 +2,27 @@
 ## postgres-backup-cronjob.yaml
 ##
 ## CronJob que hace pg_dump diario a las 3:00 AM (hora Argentina, UTC-3 → 06:00 UTC)
-## y guarda el backup en un volumen local.
+## y guarda los backups en /var/backups/viaja-con-moni en el nodo.
 ##
-## ⚠️  IMPORTANTE — local-path y single-node k3s:
-## El PVC de postgres usa local-path, que guarda datos en el disco del nodo.
-## Si el nodo se rompe físicamente, los datos se pierden.
-## Este CronJob es una primera capa de protección pero los backups también
-## están en el mismo disco. Para producción real, configurá un segundo destino
-## (S3, Backblaze B2, rclone a Google Drive, etc.) agregando un step adicional
-## en el script del CronJob.
+## Se usa hostPath en lugar de un PVC independiente porque local-path tiene
+## volumeBindingMode: WaitForFirstConsumer — un PVC sin pod que lo monte queda
+## en Pending indefinidamente, lo que ArgoCD interpreta como estado degradado
+## y bloquea el sync de toda la aplicación.
+##
+## ⚠️  IMPORTANTE — single-node k3s:
+## Los backups viven en el mismo disco físico que los datos de postgres.
+## Si el nodo se rompe, se pierden ambos. Para mayor seguridad, agregá un
+## paso al script que copie el backup a un destino externo:
+##   - rclone a Google Drive / Backblaze B2 / S3
+##   - scp a otro servidor
 ## ─────────────────────────────────────────────────────────────────────────────
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-backup-pvc
-  namespace: viaja-con-moni
-  labels:
-    app.kubernetes.io/name:    postgres-backup
-    app.kubernetes.io/part-of: viaja-con-moni
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: local-path
-  resources:
-    requests:
-      storage: 10Gi
-
----
-
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: postgres-backup
   namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     app.kubernetes.io/name:    postgres-backup
     app.kubernetes.io/part-of: viaja-con-moni
@@ -42,13 +30,31 @@ spec:
   ## 06:00 UTC = 03:00 hora Argentina
   schedule: "0 6 * * *"
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 7   # conserva logs de los últimos 7 backups
+  successfulJobsHistoryLimit: 7
   failedJobsHistoryLimit:     3
   jobTemplate:
     spec:
       template:
         spec:
           restartPolicy: OnFailure
+
+          ## Necesario para que el container pueda escribir en el hostPath
+          securityContext:
+            runAsUser:  999
+            runAsGroup: 999
+            fsGroup:    999
+
+          initContainers:
+            ## Crea el directorio de backups en el nodo con los permisos correctos
+            - name: init-backup-dir
+              image: busybox:1.36
+              command: ["sh", "-c", "mkdir -p /backups && chown 999:999 /backups"]
+              securityContext:
+                runAsUser: 0
+              volumeMounts:
+                - name:      backup-storage
+                  mountPath: /backups
+
           containers:
             - name: backup
               image: postgres:16-alpine
@@ -89,11 +95,15 @@ spec:
 
                   ## Rotar: conservar solo los últimos 30 archivos
                   ls -t /backups/*.sql.gz | tail -n +31 | xargs -r rm --
-                  echo "🗑️  Archivos viejos eliminados. Total backups: $(ls /backups/*.sql.gz | wc -l)"
+                  echo "🗑️  Archivos viejos eliminados. Total: $(ls /backups/*.sql.gz | wc -l)"
               volumeMounts:
                 - name:      backup-storage
                   mountPath: /backups
+
           volumes:
+            ## hostPath: sin PVC, sin WaitForFirstConsumer, sin bloqueo de ArgoCD.
+            ## El directorio se crea automáticamente por el initContainer de arriba.
             - name: backup-storage
-              persistentVolumeClaim:
-                claimName: postgres-backup-pvc
+              hostPath:
+                path: /var/backups/viaja-con-moni
+                type: DirectoryOrCreate
