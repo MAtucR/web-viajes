@@ -5,21 +5,37 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
-  const router     = useRouter();
-  const emailRef   = useRef<HTMLInputElement>(null);
-  const passRef    = useRef<HTMLInputElement>(null);
-  const [error,    setError]   = useState('');
-  const [loading,  setLoading] = useState(false);
+  const router    = useRouter();
+  const emailRef  = useRef<HTMLInputElement>(null);
+  const passRef   = useRef<HTMLInputElement>(null);
+  const [error,   setError]   = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     const email    = emailRef.current?.value.trim()   ?? '';
     const password = passRef.current?.value           ?? '';
     if (!email || !password) return setError('Completá todos los campos');
-    setLoading(true); setError('');
+
+    setLoading(true);
+    setError('');
+
     const res = await signIn('credentials', { email, password, redirect: false });
+
     setLoading(false);
-    if (res?.error) setError('Email o contraseña incorrectos');
-    else router.push('/admin');
+
+    // res?.ok === false cubre el caso donde NextAuth no devuelve error string
+    // pero tampoco logra autenticar (ej: CSRF mismatch, NEXTAUTH_URL incorrecta)
+    if (!res || !res.ok) {
+      setError(
+        res?.error === 'CredentialsSignin'
+          ? 'Email o contraseña incorrectos'
+          : 'No se pudo iniciar sesión. Verificá tu conexión e intentá de nuevo.'
+      );
+      return;
+    }
+
+    router.push('/admin');
+    router.refresh();
   };
 
   return (
@@ -39,10 +55,13 @@ export default function LoginPage() {
         </div>
         <div className="form-group">
           <label>Contraseña</label>
-          <input ref={passRef} type="password" placeholder="••••••••" autoComplete="current-password" defaultValue="" />
+          <input ref={passRef} type="password" placeholder="••••••••"
+            autoComplete="current-password"
+            defaultValue=""
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
         </div>
 
-        {/* Olvidé mi contraseña */}
         <div style={{ textAlign: 'right', marginTop: '-0.5rem', marginBottom: '1.25rem' }}>
           <Link href="/forgot-password" style={{ color: '#667eea', fontSize: '0.85rem', fontWeight: 500 }}>
             ¿Olvidaste tu contraseña?
