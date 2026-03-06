@@ -35,8 +35,8 @@ RUN npm run build
 
 # ─────────────────────────────────────────────
 # Stage 3: migrator
-# Imagen liviana que solo corre `prisma migrate deploy`.
-# Usada por el initContainer de k8s. Incluye la CLI de prisma.
+# Corre migraciones + seed del admin en el initContainer de k8s.
+# No necesita tsx — el seed es JS puro.
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS migrator
 
@@ -48,7 +48,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma       ./prisma
 COPY package.json ./
 
-CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+# Script de arranque: migraciones + seed admin
+CMD ["/bin/sh", "-c", "node_modules/.bin/prisma migrate deploy && node prisma/seed.js"]
 
 # ─────────────────────────────────────────────
 # Stage 4: runner
