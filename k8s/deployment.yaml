@@ -60,7 +60,8 @@ spec:
               echo "PostgreSQL disponible ✅"
 
         - name: migrate
-          image: ghcr.io/matucr/web-viajes:latest
+          ## Imagen dedicada con la CLI de prisma — NO la imagen del runner
+          image: ghcr.io/matucr/web-viajes:migrate
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -114,8 +115,6 @@ spec:
               cpu:    "1000m"
               memory: "1Gi"
 
-          ## livenessProbe: solo verifica que el proceso está vivo (NO toca DB)
-          ## Si fallara esto, el pod realmente está muerto y se reinicia.
           livenessProbe:
             httpGet:
               path: /api/ping
@@ -125,8 +124,6 @@ spec:
             timeoutSeconds:      3
             failureThreshold:    3
 
-          ## readinessProbe: verifica que la app puede servir tráfico con DB
-          ## Si falla, el pod sale del balanceo pero NO se reinicia.
           readinessProbe:
             httpGet:
               path: /api/health
