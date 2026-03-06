@@ -1,24 +1,25 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { DESTINATIONS, destImageKey, type Destination } from '@/lib/destinations';
 
 type Settings = Record<string, string>;
-type Tab = 'perfil' | 'sitio' | 'smtp' | 'notificaciones';
+type Tab = 'perfil' | 'sitio' | 'smtp' | 'notificaciones' | 'imagenes';
 
 const SMTP_FIELDS = [
-  { key: 'smtp_host', label: 'Host SMTP',        placeholder: 'smtp.gmail.com',           type: 'text'     },
-  { key: 'smtp_port', label: 'Puerto',           placeholder: '587',                      type: 'number'   },
-  { key: 'smtp_user', label: 'Usuario / Email',  placeholder: 'tu@gmail.com',             type: 'email'    },
-  { key: 'smtp_pass', label: 'Contraseña SMTP', placeholder: 'App password de 16 chars', type: 'password' },
-  { key: 'smtp_from', label: 'Nombre remitente', placeholder: 'Viaja con Moni <info@viajaconmoni.com>', type: 'text' },
+  { key: 'smtp_host', label: 'Host SMTP',        placeholder: 'smtp.gmail.com',                        type: 'text'     },
+  { key: 'smtp_port', label: 'Puerto',           placeholder: '587',                                   type: 'number'   },
+  { key: 'smtp_user', label: 'Usuario / Email',  placeholder: 'tu@gmail.com',                          type: 'email'    },
+  { key: 'smtp_pass', label: 'Contraseña SMTP', placeholder: 'App password (16 caracteres)',           type: 'password' },
+  { key: 'smtp_from', label: 'Nombre remitente', placeholder: 'Viaja con Moni <info@viajaconmoni.com>', type: 'text'     },
 ];
 
 export default function SettingsPage() {
   const { data: session, status, update: updateSession } = useSession();
-  const router   = useRouter();
-  const role     = (session?.user as any)?.role;
-  const isAdmin  = role === 'ADMIN';
+  const router  = useRouter();
+  const role    = (session?.user as any)?.role;
+  const isAdmin = role === 'ADMIN';
 
   const [tab,      setTab]      = useState<Tab>('perfil');
   const [settings, setSettings] = useState<Settings>({});
@@ -27,32 +28,28 @@ export default function SettingsPage() {
   const [saving,   setSaving]   = useState<string | null>(null);
   const [toast,    setToast]    = useState<{ msg: string; ok: boolean } | null>(null);
   const [smtpPassVisible, setSmtpPassVisible] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
   const [avatarPreview, setAvatarPreview] = useState('');
 
-  // Guard: redirect si no es admin
+  // Guard
   useEffect(() => {
     if (status === 'unauthenticated') { router.replace('/login'); return; }
-    if (status === 'authenticated' && !isAdmin) { router.replace('/admin'); }
+    if (status === 'authenticated' && !isAdmin) router.replace('/admin');
   }, [status, isAdmin, router]);
 
-  // Cargar settings
-  useEffect(() => {
+  const loadSettings = useCallback(() => {
     if (status !== 'authenticated' || !isAdmin) return;
+    setLoading(true); setApiError('');
     fetch('/api/admin/settings')
       .then(r => {
-        if (!r.ok) throw new Error(`Error ${r.status}: ${r.statusText}`);
+        if (!r.ok) return r.json().then(d => { throw new Error(d?.error || `Error ${r.status}`); });
         return r.json();
       })
-      .then(data => {
-        setSettings(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        setApiError(err.message || 'No se pudo cargar la configuración');
-        setLoading(false);
-      });
+      .then(data => { setSettings(data); setLoading(false); })
+      .catch(err  => { setApiError(err.message); setLoading(false); });
   }, [status, isAdmin]);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -61,7 +58,7 @@ export default function SettingsPage() {
 
   const set = (key: string, value: string) => setSettings(p => ({ ...p, [key]: value }));
 
-  const saveSection = async (keys: string[], label = 'sección') => {
+  const saveSection = async (keys: string[], label = 'configuración') => {
     setSaving(keys[0]);
     const body: Record<string, string> = {};
     keys.forEach(k => { body[k] = settings[k] ?? ''; });
@@ -70,13 +67,10 @@ export default function SettingsPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      showToast(`✅ ${label} guardado`, true);
-    } catch (e: any) {
-      showToast(`❌ ${e.message || 'Error al guardar'}`, false);
-    } finally {
-      setSaving(null);
-    }
+      if (!res.ok) { const d = await res.json(); throw new Error(d?.error || `Error ${res.status}`); }
+      showToast(`✅ ${label} guardado`);
+    } catch (e: any) { showToast(`❌ ${e.message}`, false); }
+    finally { setSaving(null); }
   };
 
   const testEmail = async () => {
@@ -105,33 +99,32 @@ export default function SettingsPage() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, phone, avatarUrl: avatar }),
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
+      if (!res.ok) { const d = await res.json(); throw new Error(d?.error || `Error ${res.status}`); }
       await updateSession({ name, avatarUrl: avatar, phone });
-      showToast('✅ Perfil actualizado', true);
-    } catch (e: any) {
-      showToast(`❌ ${e.message || 'Error al guardar perfil'}`, false);
-    } finally { setSaving(null); }
+      showToast('✅ Perfil actualizado');
+    } catch (e: any) { showToast(`❌ ${e.message}`, false); }
+    finally { setSaving(null); }
   };
 
-  // Estados de carga / error / no-admin
+  // ── Estados de carga ──
   if (status === 'loading' || (status === 'authenticated' && loading)) {
     return (
       <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center', color: '#94a3b8' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
-        <div style={{ fontWeight: 600 }}>Cargando configuración...</div>
+        <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>⏳</div>
+        <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>Cargando configuración...</div>
       </div>
     );
   }
 
   if (apiError) {
     return (
-      <div className="container" style={{ padding: '3rem 1.5rem', maxWidth: '500px' }}>
-        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '1rem', padding: '1.5rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
-          <div style={{ fontWeight: 700, color: '#dc2626', marginBottom: '0.5rem' }}>No se pudo cargar la configuración</div>
-          <div style={{ color: '#7f1d1d', fontSize: '0.875rem', marginBottom: '1rem' }}>{apiError}</div>
-          <button onClick={() => window.location.reload()}
-            style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '0.65rem', padding: '0.6rem 1.25rem', cursor: 'pointer', fontWeight: 600 }}>
+      <div className="container" style={{ padding: '3rem 1.5rem', maxWidth: '520px' }}>
+        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '1rem', padding: '2rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>⚠️</div>
+          <div style={{ fontWeight: 700, color: '#dc2626', marginBottom: '0.5rem', fontSize: '1.1rem' }}>No se pudo cargar la configuración</div>
+          <div style={{ color: '#7f1d1d', fontSize: '0.875rem', marginBottom: '1.25rem', wordBreak: 'break-all' }}>{apiError}</div>
+          <button onClick={loadSettings}
+            style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '0.65rem', padding: '0.65rem 1.5rem', cursor: 'pointer', fontWeight: 700 }}>
             Reintentar
           </button>
         </div>
@@ -144,27 +137,28 @@ export default function SettingsPage() {
   const userName      = session?.user?.name ?? '';
   const userEmail     = session?.user?.email ?? '';
   const currentAvatar = avatarPreview || (session?.user as any)?.avatarUrl || '';
+  const smtpOk        = !!(settings.smtp_host && settings.smtp_user && settings.smtp_pass);
 
-  const smtpConfigured = !!(settings.smtp_host && settings.smtp_user && settings.smtp_pass);
-
-  const TABS: { id: Tab; label: string; icon: string }[] = [
-    { id: 'perfil',          label: 'Mi perfil',       icon: '👤' },
-    { id: 'sitio',           label: 'Sitio',           icon: '🌐' },
-    { id: 'smtp',            label: 'Email / SMTP',    icon: '📧' },
-    { id: 'notificaciones',  label: 'Notificaciones',  icon: '🔔' },
+  const TABS: { id: Tab; label: string; icon: string; dot?: 'green' | 'yellow' }[] = [
+    { id: 'perfil',         label: 'Mi perfil',      icon: '👤' },
+    { id: 'imagenes',       label: 'Imágenes',        icon: '🖼️' },
+    { id: 'sitio',          label: 'Sitio',           icon: '🌐' },
+    { id: 'smtp',           label: 'Email / SMTP',   icon: '📧', dot: smtpOk ? 'green' : 'yellow' },
+    { id: 'notificaciones', label: 'Notificaciones', icon: '🔔' },
   ];
 
   return (
-    <div className="container" style={{ padding: '2.5rem 1.5rem', maxWidth: '820px' }}>
+    <div className="container" style={{ padding: '2.5rem 1.5rem', maxWidth: '860px' }}>
 
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: '1.5rem', right: '1.5rem',
-          background: toast.ok ? '#1e293b' : '#dc2626',
-          color: 'white', padding: '0.8rem 1.25rem', borderRadius: '0.75rem',
-          zIndex: 9999, fontWeight: 600, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999,
+          background: toast.ok ? '#1e293b' : '#dc2626', color: 'white',
+          padding: '0.8rem 1.25rem', borderRadius: '0.75rem',
+          fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
           display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem',
+          animation: 'slideIn 0.2s ease',
         }}>
           {toast.msg}
         </div>
@@ -173,40 +167,34 @@ export default function SettingsPage() {
       {/* Header */}
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>⚙️ Configuración</h1>
-        <p style={{ color: '#64748b' }}>Perfil, notificaciones y ajustes del sistema</p>
+        <p style={{ color: '#64748b' }}>Perfil, imágenes, notificaciones y ajustes del sistema</p>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.75rem', flexWrap: 'wrap',
-                    borderBottom: '2px solid #f1f5f9', paddingBottom: '0' }}>
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.75rem', flexWrap: 'wrap', borderBottom: '2px solid #f1f5f9' }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '0.65rem 1.1rem',
-              fontWeight: tab === t.id ? 700 : 500,
-              color: tab === t.id ? '#667eea' : '#64748b',
-              borderBottom: `2px solid ${tab === t.id ? '#667eea' : 'transparent'}`,
-              marginBottom: '-2px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
-              transition: 'color 0.15s',
-            }}>
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '0.65rem 1rem', fontWeight: tab === t.id ? 700 : 500,
+            color: tab === t.id ? '#667eea' : '#64748b',
+            borderBottom: `2px solid ${tab === t.id ? '#667eea' : 'transparent'}`,
+            marginBottom: '-2px', fontSize: '0.88rem',
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+          }}>
             {t.icon} {t.label}
-            {t.id === 'smtp' && (
-              <span style={{
-                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-                background: smtpConfigured ? '#10b981' : '#f59e0b',
-                display: 'inline-block',
-              }} title={smtpConfigured ? 'SMTP configurado' : 'SMTP sin configurar'} />
+            {t.dot && (
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0,
+                background: t.dot === 'green' ? '#10b981' : '#f59e0b' }} />
             )}
           </button>
         ))}
       </div>
 
-      {/* ── Tab: PERFIL ── */}
+      {/* ── PERFIL ── */}
       {tab === 'perfil' && (
         <Card title="👤 Mi perfil" subtitle="Nombre, teléfono y foto de perfil">
           <ProfileForm
-            initialName={userName}
-            initialEmail={userEmail}
+            initialName={userName} initialEmail={userEmail}
             initialPhone={(session?.user as any)?.phone ?? ''}
             avatarPreview={currentAvatar}
             onAvatarFile={handleAvatarFile}
@@ -217,154 +205,329 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* ── Tab: SITIO ── */}
+      {/* ── IMÁGENES ── */}
+      {tab === 'imagenes' && (
+        <ImageTab settings={settings} onSet={set} onSave={saveSection} onDelete={async (key) => {
+          setSaving(key);
+          try {
+            const res = await fetch('/api/admin/settings', {
+              method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key }),
+            });
+            if (!res.ok) throw new Error();
+            setSettings(p => { const n = { ...p }; delete n[key]; return n; });
+            showToast('✅ Imagen eliminada — se volverá a usar la foto por defecto');
+          } catch { showToast('❌ Error al eliminar', false); }
+          finally { setSaving(null); }
+        }} saving={saving} />
+      )}
+
+      {/* ── SITIO ── */}
       {tab === 'sitio' && (
         <Card title="🌐 Configuración del sitio" subtitle="Nombre del sitio y email de notificaciones">
           <div className="form-group">
             <label>Nombre del sitio</label>
-            <input type="text" value={settings.site_name ?? ''}
-              onChange={e => set('site_name', e.target.value)}
-              placeholder="Viaja con Moni" />
+            <input type="text" value={settings.site_name ?? ''} onChange={e => set('site_name', e.target.value)} placeholder="Viaja con Moni" />
           </div>
           <div className="form-group">
             <label>Email para recibir notificaciones de nuevas inscripciones</label>
-            <input type="email" value={settings.notify_email ?? ''}
-              onChange={e => set('notify_email', e.target.value)}
-              placeholder="moni@ejemplo.com" inputMode="email" />
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.3rem' }}>
-              A este email llegan los avisos cuando alguien se inscribe a un viaje.
-            </p>
+            <input type="email" value={settings.notify_email ?? ''} onChange={e => set('notify_email', e.target.value)} placeholder="moni@ejemplo.com" inputMode="email" />
+            <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.3rem' }}>A este email llegan los avisos cuando alguien se inscribe a un viaje.</p>
           </div>
-          <SaveBtn keys={['site_name', 'notify_email']} label="Configuración del sitio"
-            onSave={saveSection} saving={saving} />
+          <SaveBtn keys={['site_name', 'notify_email']} label="Configuración del sitio" onSave={saveSection} saving={saving} />
         </Card>
       )}
 
-      {/* ── Tab: SMTP ── */}
+      {/* ── SMTP ── */}
       {tab === 'smtp' && (
-        <>
-          <Card title="📧 Configuración SMTP" subtitle="Para enviar emails automáticos (confirmaciones, reseteo de contraseña, etc.)">
-
-            {/* Status badge */}
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-              background: smtpConfigured ? '#f0fdf4' : '#fffbeb',
-              border: `1px solid ${smtpConfigured ? '#bbf7d0' : '#fde68a'}`,
-              borderRadius: '0.75rem', padding: '0.6rem 1rem', marginBottom: '1.25rem',
-              fontSize: '0.85rem', fontWeight: 600,
-              color: smtpConfigured ? '#15803d' : '#92400e',
-            }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: smtpConfigured ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
-              {smtpConfigured ? 'SMTP configurado' : 'SMTP no configurado — los emails no se envían'}
+        <Card title="📧 Configuración SMTP" subtitle="Para emails automáticos (confirmaciones, reseteo de contraseña, etc.)">
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+            background: smtpOk ? '#f0fdf4' : '#fffbeb',
+            border: `1px solid ${smtpOk ? '#bbf7d0' : '#fde68a'}`,
+            borderRadius: '0.75rem', padding: '0.6rem 1rem', marginBottom: '1.25rem',
+            fontSize: '0.85rem', fontWeight: 600, color: smtpOk ? '#15803d' : '#92400e',
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: smtpOk ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+            {smtpOk ? 'SMTP configurado ✔' : 'SMTP no configurado — los emails no se envían'}
+          </div>
+          <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '0.9rem 1rem', marginBottom: '1.25rem', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.65 }}>
+            <strong>💡 Gmail:</strong> Seguridad → Verificación en 2 pasos → <strong>Contraseñas de aplicación</strong>. Creá una para esta app y usá la clave de 16 chars como contraseña SMTP.<br />
+            Host: <code style={{ background: '#e2e8f0', padding: '0.1rem 0.35rem', borderRadius: '0.25rem' }}>smtp.gmail.com</code> · Puerto: <code style={{ background: '#e2e8f0', padding: '0.1rem 0.35rem', borderRadius: '0.25rem' }}>587</code>
+          </div>
+          {SMTP_FIELDS.map(f => (
+            <div key={f.key} className="form-group">
+              <label>{f.label}</label>
+              {f.key === 'smtp_pass' ? (
+                <div style={{ position: 'relative' }}>
+                  <input type={smtpPassVisible ? 'text' : 'password'} value={settings.smtp_pass ?? ''}
+                    onChange={e => set('smtp_pass', e.target.value)}
+                    placeholder={f.placeholder} autoComplete="new-password" style={{ paddingRight: '3rem' }} />
+                  <button type="button" onClick={() => setSmtpPassVisible(v => !v)}
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#64748b', padding: '0.25rem' }}>
+                    {smtpPassVisible ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              ) : (
+                <input type={f.type} value={settings[f.key] ?? ''} onChange={e => set(f.key, e.target.value)} placeholder={f.placeholder} autoComplete="off" />
+              )}
             </div>
-
-            {/* Tip Gmail */}
-            <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.25rem', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.65 }}>
-              <strong>💡 Gmail:</strong> en tu cuenta Google andá a
-              <strong> Seguridad → Verificación en 2 pasos → Contraseñas de aplicación</strong>
-              , creá una para esta app y usá esa clave de 16 caracteres como contraseña SMTP.<br />
-              Host: <code style={{ background: '#e2e8f0', padding: '0.1rem 0.4rem', borderRadius: '0.25rem' }}>smtp.gmail.com</code> ·
-              Puerto: <code style={{ background: '#e2e8f0', padding: '0.1rem 0.4rem', borderRadius: '0.25rem' }}>587</code>
-            </div>
-
-            {SMTP_FIELDS.map(f => (
-              <div key={f.key} className="form-group">
-                <label>{f.label}</label>
-                {f.key === 'smtp_pass' ? (
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={smtpPassVisible ? 'text' : 'password'}
-                      value={settings.smtp_pass ?? ''}
-                      onChange={e => set('smtp_pass', e.target.value)}
-                      placeholder={f.placeholder}
-                      autoComplete="new-password"
-                      style={{ paddingRight: '3rem' }}
-                    />
-                    <button type="button"
-                      onClick={() => setSmtpPassVisible(v => !v)}
-                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#64748b', padding: '0.25rem' }}>
-                      {smtpPassVisible ? '🙈' : '👁️'}
-                    </button>
-                  </div>
-                ) : (
-                  <input type={f.type} value={settings[f.key] ?? ''}
-                    onChange={e => set(f.key, e.target.value)}
-                    placeholder={f.placeholder} autoComplete="off" />
-                )}
-              </div>
-            ))}
-
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-              <SaveBtn keys={SMTP_FIELDS.map(f => f.key)} label="Configuración SMTP" onSave={saveSection} saving={saving} btnLabel="💾 Guardar SMTP" />
-              <button onClick={testEmail} disabled={!!saving || !smtpConfigured}
-                title={!smtpConfigured ? 'Configurá y guardá el SMTP primero' : ''}
-                style={{
-                  background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '0.75rem',
-                  padding: '0.7rem 1.25rem', cursor: (saving || !smtpConfigured) ? 'not-allowed' : 'pointer',
-                  fontWeight: 600, color: '#374151', fontSize: '0.9rem',
-                  opacity: !smtpConfigured ? 0.5 : 1,
-                }}>
-                {saving === 'test' ? '⏳ Enviando...' : '🧪 Enviar email de prueba'}
-              </button>
-            </div>
-          </Card>
-        </>
+          ))}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+            <SaveBtn keys={SMTP_FIELDS.map(f => f.key)} label="Configuración SMTP" onSave={saveSection} saving={saving} btnLabel="💾 Guardar SMTP" />
+            <button onClick={testEmail} disabled={!!saving || !smtpOk}
+              title={!smtpOk ? 'Configurá y guardá el SMTP primero' : ''}
+              style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '0.7rem 1.25rem', cursor: (saving || !smtpOk) ? 'not-allowed' : 'pointer', fontWeight: 600, color: '#374151', fontSize: '0.9rem', opacity: !smtpOk ? 0.5 : 1 }}>
+              {saving === 'test' ? '⏳ Enviando...' : '🧪 Enviar email de prueba'}
+            </button>
+          </div>
+        </Card>
       )}
 
-      {/* ── Tab: NOTIFICACIONES ── */}
+      {/* ── NOTIFICACIONES ── */}
       {tab === 'notificaciones' && (
         <Card title="🔔 Notificaciones automáticas" subtitle="Elegí qué emails se envían automáticamente">
-
-          {!smtpConfigured && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.85rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#92400e', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              ⚠️ El SMTP no está configurado — los emails no se enviarán aunque estén activados.
-              <button onClick={() => setTab('smtp')} style={{ background: 'none', border: 'none', color: '#667eea', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}>Configurar →</button>
+          {!smtpOk && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.85rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#92400e', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              ⚠️ SMTP no configurado — los emails no se enviarán aunque estén activados.
+              <button onClick={() => setTab('smtp')} style={{ background: 'none', border: 'none', color: '#667eea', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.85rem' }}>Configurar ahora →</button>
             </div>
           )}
-
           {[
-            { key: 'email_on_enroll',   label: '✉️ Email al viajero al inscribirse',        desc: 'Confirmación de inscripción + datos del viaje' },
-            { key: 'email_on_new_trip', label: '🆕 Notificar usuarios al publicar un viaje',  desc: 'Avisa a todos los usuarios registrados sobre el nuevo viaje' },
+            { key: 'email_on_enroll',   label: '✉️ Email al viajero al inscribirse',       desc: 'Envía confirmación de inscripción + datos del viaje' },
+            { key: 'email_on_new_trip', label: '🆕 Notificar usuarios al publicar un viaje', desc: 'Avisa a todos los usuarios registrados sobre el nuevo viaje' },
           ].map(n => (
-            <div key={n.key} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '0.875rem', marginBottom: '0.75rem',
-              background: (settings[n.key] ?? 'true') !== 'false' ? '#f8faff' : 'white',
-              transition: 'background 0.2s',
-            }}>
+            <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '0.875rem', marginBottom: '0.75rem', background: (settings[n.key] ?? 'true') !== 'false' ? '#f8faff' : 'white', transition: 'background 0.2s' }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{n.label}</div>
                 <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>{n.desc}</div>
               </div>
-              <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', flexShrink: 0, marginLeft: '1rem' }}>
-                <input type="checkbox"
-                  checked={(settings[n.key] ?? 'true') !== 'false'}
-                  onChange={e => set(n.key, e.target.checked ? 'true' : 'false')}
-                  style={{ opacity: 0, width: 0, height: 0 }} />
-                <span style={{
-                  position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: '999px', transition: '0.3s',
-                  background: (settings[n.key] ?? 'true') !== 'false' ? '#667eea' : '#cbd5e1',
-                }}>
-                  <span style={{
-                    position: 'absolute', width: '20px', height: '20px',
-                    left: (settings[n.key] ?? 'true') !== 'false' ? '23px' : '3px',
-                    bottom: '3px', background: 'white', borderRadius: '50%', transition: '0.3s',
-                  }} />
-                </span>
-              </label>
+              <Toggle checked={(settings[n.key] ?? 'true') !== 'false'} onChange={v => set(n.key, v ? 'true' : 'false')} />
             </div>
           ))}
-
-          <SaveBtn keys={['email_on_enroll', 'email_on_new_trip']} label="Notificaciones"
-            onSave={saveSection} saving={saving} />
+          <SaveBtn keys={['email_on_enroll', 'email_on_new_trip']} label="Notificaciones" onSave={saveSection} saving={saving} />
         </Card>
       )}
 
+      <style>{`@keyframes slideIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }`}</style>
     </div>
   );
 }
 
-/* ── Subcomponentes ──────────────────────────────────────────────────── */
+/* ── Tab Imágenes ───────────────────────────────────────────────── */
+
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+const MAX_SIZE = 500_000; // 500KB
+
+function ImageTab({
+  settings, onSet, onSave, onDelete, saving,
+}: {
+  settings: Settings;
+  onSet: (key: string, val: string) => void;
+  onSave: (keys: string[], label: string) => void;
+  onDelete: (key: string) => void;
+  saving: string | null;
+}) {
+  const [selected, setSelected]     = useState<Destination | null>(null);
+  const [urlInput,  setUrlInput]    = useState('');
+  const [preview,   setPreview]     = useState('');
+  const [filter,    setFilter]      = useState<'all' | 'custom'>('all');
+  const [search,    setSearch]      = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const open = (dest: Destination) => {
+    setSelected(dest);
+    const key     = destImageKey(dest.slug);
+    const current = settings[key] || '';
+    setPreview(current || dest.image);
+    setUrlInput(current.startsWith('http') ? current : '');
+  };
+
+  const close = () => { setSelected(null); setPreview(''); setUrlInput(''); };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ACCEPTED.includes(file.type)) {
+      alert('Formato no permitido. Usá JPG, PNG, WebP, GIF o AVIF.'); return;
+    }
+    if (file.size > MAX_SIZE) {
+      alert(`La imagen es muy grande (${(file.size / 1024).toFixed(0)} KB). Máximo 500 KB.`); return;
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const b64 = ev.target?.result as string;
+      setPreview(b64);
+      setUrlInput('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUrl = (url: string) => {
+    setUrlInput(url);
+    if (url.startsWith('https://')) setPreview(url);
+  };
+
+  const save = () => {
+    if (!selected) return;
+    const key = destImageKey(selected.slug);
+    const val = preview.startsWith('data:') ? preview : urlInput;
+    if (!val) return;
+    onSet(key, val);
+    onSave([key], `Imagen de ${selected.name}`);
+    close();
+  };
+
+  const filteredDests = DESTINATIONS.filter(d => {
+    const hasCustom = !!settings[destImageKey(d.slug)];
+    if (filter === 'custom' && !hasCustom) return false;
+    if (search && !d.name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <Card title="🖼️ Imágenes de destinos" subtitle="Personalizá las fotos de cada destino. Se muestran en la página principal y en las tarjetas de viajes.">
+        {/* Toolbar */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input type="text" placeholder="🔍 Buscar destino..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ flex: 1, minWidth: '160px', padding: '0.55rem 0.85rem', border: '1px solid #e2e8f0', borderRadius: '0.65rem', fontSize: '0.875rem', outline: 'none' }} />
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {(['all', 'custom'] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                style={{ padding: '0.5rem 0.9rem', border: `1.5px solid ${filter === f ? '#667eea' : '#e2e8f0'}`, borderRadius: '0.6rem', background: filter === f ? '#667eea' : 'white', color: filter === f ? 'white' : '#374151', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', transition: 'all 0.15s' }}>
+                {f === 'all' ? 'Todos' : 'Con imagen custom'}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+            {Object.keys(settings).filter(k => k.startsWith('dest_image_')).length} custom
+          </span>
+        </div>
+
+        {/* Grid de destinos */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem' }}>
+          {filteredDests.map(dest => {
+            const key       = destImageKey(dest.slug);
+            const hasCustom = !!settings[key];
+            const imgSrc    = settings[key] || dest.image;
+            const isLoading = saving === key;
+            return (
+              <div key={dest.slug}
+                onClick={() => open(dest)}
+                style={{ position: 'relative', borderRadius: '0.875rem', overflow: 'hidden', cursor: 'pointer', border: hasCustom ? '2.5px solid #667eea' : '2px solid transparent', transition: 'transform 0.15s, border-color 0.15s', aspectRatio: '4/3' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.02)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                <img src={imgSrc} alt={dest.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onError={e => { (e.target as HTMLImageElement).src = dest.image; }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 55%)' }} />
+
+                {/* Badge custom */}
+                {hasCustom && (
+                  <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: '#667eea', color: 'white', fontSize: '0.65rem', fontWeight: 800, borderRadius: '999px', padding: '0.15rem 0.45rem' }}>
+                    CUSTOM
+                  </div>
+                )}
+
+                {isLoading && (
+                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1.5rem' }}>⏳</div>
+                )}
+
+                <div style={{ position: 'absolute', bottom: '0.6rem', left: '0.75rem', right: '0.75rem' }}>
+                  <div style={{ color: 'white', fontWeight: 700, fontSize: '0.88rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{dest.emoji} {dest.name}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.7rem' }}>{dest.region}</div>
+                </div>
+
+                {/* Hover overlay con ícono edición */}
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(102,126,234,0.0)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'all 0.2s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(102,126,234,0.35)'; e.currentTarget.style.opacity = '1'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(102,126,234,0.0)'; e.currentTarget.style.opacity = '0'; }}>
+                  <div style={{ background: 'white', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>✏️</div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredDests.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>No se encontraron destinos.</div>
+          )}
+        </div>
+      </Card>
+
+      {/* Modal de edición */}
+      {selected && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '520px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', overflowY: 'auto' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{selected.emoji} {selected.name}</h3>
+              <button onClick={close} style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', padding: '0.25rem' }}>✕</button>
+            </div>
+
+            {/* Preview */}
+            <div style={{ borderRadius: '0.875rem', overflow: 'hidden', marginBottom: '1.25rem', aspectRatio: '16/7', position: 'relative', background: '#f1f5f9' }}>
+              {preview ? (
+                <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={() => setPreview(selected.image)} />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '2rem' }}>🖼️</div>
+              )}
+              {preview && (
+                <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: '0.7rem', fontWeight: 600, borderRadius: '0.4rem', padding: '0.2rem 0.5rem' }}>
+                  {preview.startsWith('data:') ? 'Imagen subida' : 'URL'}
+                </div>
+              )}
+            </div>
+
+            {/* Upload */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: '0.5rem', color: '#374151' }}>Opción 1 — Subir imagen desde tu dispositivo</div>
+              <input ref={fileRef} type="file" accept={ACCEPTED.join(',')} onChange={handleFile} style={{ display: 'none' }} />
+              <button type="button" onClick={() => fileRef.current?.click()}
+                style={{ width: '100%', padding: '0.85rem', border: '2px dashed #e2e8f0', borderRadius: '0.75rem', background: '#fafafa', cursor: 'pointer', color: '#64748b', fontWeight: 600, fontSize: '0.875rem', transition: 'border-color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = '#667eea')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = '#e2e8f0')}>
+                📁 Seleccionar imagen (JPG, PNG, WebP, GIF · máx 500KB)
+              </button>
+            </div>
+
+            {/* URL */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: '0.5rem', color: '#374151' }}>Opción 2 — Pegá una URL de imagen</div>
+              <input type="url" value={urlInput} onChange={e => handleUrl(e.target.value)}
+                placeholder="https://images.unsplash.com/..."
+                style={{ width: '100%', padding: '0.6rem 0.85rem', border: '1px solid #e2e8f0', borderRadius: '0.65rem', fontSize: '0.875rem', boxSizing: 'border-box', outline: 'none' }} />
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem' }}>Solo se aceptan URLs que empiecen con https://</p>
+            </div>
+
+            {/* Acciones */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button onClick={save}
+                disabled={!preview && !urlInput}
+                style={{ flex: 1, background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', border: 'none', borderRadius: '0.75rem', padding: '0.75rem', cursor: (!preview && !urlInput) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (!preview && !urlInput) ? 0.6 : 1 }}>
+                💾 Guardar imagen
+              </button>
+              {settings[destImageKey(selected.slug)] && (
+                <button onClick={() => { onDelete(destImageKey(selected.slug)); close(); }}
+                  style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '0.75rem', padding: '0.75rem 1rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
+                  🗑️ Restaurar default
+                </button>
+              )}
+              <button onClick={close}
+                style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '0.75rem', padding: '0.75rem 1rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Subcomponentes ───────────────────────────────────────────────── */
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -378,32 +541,31 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   );
 }
 
-function SaveBtn({
-  keys, label, onSave, saving, btnLabel = '💾 Guardar',
-}: {
-  keys: string[];
-  label: string;
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', flexShrink: 0, marginLeft: '1rem', cursor: 'pointer' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+      <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: '999px', transition: '0.3s', background: checked ? '#667eea' : '#cbd5e1' }}>
+        <span style={{ position: 'absolute', width: '20px', height: '20px', left: checked ? '23px' : '3px', bottom: '3px', background: 'white', borderRadius: '50%', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+      </span>
+    </label>
+  );
+}
+
+function SaveBtn({ keys, label, onSave, saving, btnLabel = '💾 Guardar' }: {
+  keys: string[]; label: string;
   onSave: (k: string[], label: string) => void;
-  saving: string | null;
-  btnLabel?: string;
+  saving: string | null; btnLabel?: string;
 }) {
-  const isLoading = saving === keys[0];
   return (
     <button onClick={() => onSave(keys, label)} disabled={!!saving}
-      style={{
-        background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white',
-        border: 'none', borderRadius: '0.75rem', padding: '0.7rem 1.5rem',
-        cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700,
-        opacity: saving ? 0.7 : 1, fontSize: '0.9rem',
-      }}>
-      {isLoading ? '⏳ Guardando...' : btnLabel}
+      style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', border: 'none', borderRadius: '0.75rem', padding: '0.7rem 1.5rem', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1, fontSize: '0.9rem' }}>
+      {saving === keys[0] ? '⏳ Guardando...' : btnLabel}
     </button>
   );
 }
 
-function ProfileForm({
-  initialName, initialEmail, initialPhone, avatarPreview, onAvatarFile, fileInputRef, onSave, saving,
-}: {
+function ProfileForm({ initialName, initialEmail, initialPhone, avatarPreview, onAvatarFile, fileInputRef, onSave, saving }: {
   initialName: string; initialEmail: string; initialPhone: string;
   avatarPreview: string;
   onAvatarFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -417,11 +579,8 @@ function ProfileForm({
 
   return (
     <div>
-      {/* Avatar */}
       <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div style={{ width: '80px', height: '80px', borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-          background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 10px rgba(102,126,234,0.3)' }}>
+        <div style={{ width: '80px', height: '80px', borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(102,126,234,0.3)' }}>
           {preview
             ? <img src={preview} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <span style={{ color: 'white', fontSize: '2rem', fontWeight: 700 }}>{initialName.charAt(0).toUpperCase()}</span>
@@ -443,22 +602,15 @@ function ProfileForm({
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={e => {
             onAvatarFile(e);
-            if (e.target.files?.[0]) {
-              const r = new FileReader();
-              r.onload = ev => setPreview(ev.target?.result as string);
-              r.readAsDataURL(e.target.files[0]);
-            }
+            if (e.target.files?.[0]) { const r = new FileReader(); r.onload = ev => setPreview(ev.target?.result as string); r.readAsDataURL(e.target.files[0]); }
           }} style={{ display: 'none' }} />
           <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>JPG, PNG, GIF · máx 500KB</p>
         </div>
       </div>
 
-      {/* URL alternativa */}
       <div className="form-group">
-        <label>O pegá una URL de imagen (https://...)</label>
-        <input type="url" placeholder="https://..."
-          defaultValue={preview.startsWith('https://') ? preview : ''}
-          onChange={e => setPreview(e.target.value)} />
+        <label>O pegá una URL (https://...)</label>
+        <input type="url" placeholder="https://..." defaultValue={preview.startsWith('https://') ? preview : ''} onChange={e => setPreview(e.target.value)} />
       </div>
 
       <div style={{ background: '#f8fafc', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.82rem', color: '#64748b' }}>
@@ -466,25 +618,13 @@ function ProfileForm({
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="form-group">
-          <label>Nombre</label>
-          <input ref={nameRef} type="text" defaultValue={initialName} placeholder="Tu nombre" />
-        </div>
-        <div className="form-group">
-          <label>Teléfono</label>
-          <input ref={phoneRef} type="tel" defaultValue={initialPhone} placeholder="+54 9 ..." inputMode="tel" />
-        </div>
+        <div className="form-group"><label>Nombre</label><input ref={nameRef} type="text" defaultValue={initialName} placeholder="Tu nombre" /></div>
+        <div className="form-group"><label>Teléfono</label><input ref={phoneRef} type="tel" defaultValue={initialPhone} placeholder="+54 9 ..." inputMode="tel" /></div>
       </div>
 
-      <button
-        onClick={() => onSave(nameRef.current?.value ?? initialName, phoneRef.current?.value ?? '', preview)}
+      <button onClick={() => onSave(nameRef.current?.value ?? initialName, phoneRef.current?.value ?? '', preview)}
         disabled={saving}
-        style={{
-          background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white',
-          border: 'none', borderRadius: '0.75rem', padding: '0.7rem 1.5rem',
-          cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700,
-          opacity: saving ? 0.7 : 1, fontSize: '0.9rem',
-        }}>
+        style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', border: 'none', borderRadius: '0.75rem', padding: '0.7rem 1.5rem', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1, fontSize: '0.9rem' }}>
         {saving ? '⏳ Guardando...' : '💾 Guardar perfil'}
       </button>
     </div>
