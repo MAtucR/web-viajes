@@ -1,5 +1,5 @@
 // seed.js — corre con node puro, sin tsx ni ts-node
-// Crea el usuario admin si no existe. Idempotente: safe de correr múltiples veces.
+// Crea o actualiza el usuario admin. Idempotente: safe de correr múltiples veces.
 const { PrismaClient } = require('@prisma/client');
 const { createHash } = require('crypto');
 
@@ -13,19 +13,27 @@ async function main() {
   const email = process.env.ADMIN_EMAIL    || 'admin@viajaconmoni.com';
   const name  = process.env.ADMIN_NAME     || 'Moni Admin';
   const pass  = process.env.ADMIN_PASSWORD || 'admin123';
+  const hash  = hashPassword(pass);
 
   const admin = await prisma.user.upsert({
     where:  { email },
-    update: {},          // si ya existe, no lo toca
+    // IMPORTANTE: update siempre sincroniza la contraseña y el rol
+    // Si se deja update:{} y el user ya existía con otro hash, el login falla
+    update: {
+      password: hash,
+      role:     'ADMIN',
+      active:   true,
+    },
     create: {
       email,
       name,
-      password: hashPassword(pass),
+      password: hash,
       role:     'ADMIN',
+      active:   true,
     },
   });
 
-  console.log(`✅ Admin listo: ${admin.email}`);
+  console.log(`✅ Admin listo: ${admin.email} (role: ${admin.role})`);
 }
 
 main()
