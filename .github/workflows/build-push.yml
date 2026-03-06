@@ -1,10 +1,13 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## build-push.yml — Buildea y pushea la imagen a ghcr.io en cada push a main
+## build-push.yml — Buildea, pushea y actualiza el manifest de k8s
 ##
-## Imágenes resultantes:
-##   ghcr.io/matucr/web-viajes:latest          ← app Next.js
-##   ghcr.io/matucr/web-viajes:sha-<short>     ← app Next.js taggeada por commit
-##   ghcr.io/matucr/web-viajes:migrate         ← imagen con prisma CLI para k8s initContainer
+## Flujo GitOps completo:
+##   1. Build imagen app  → ghcr.io/matucr/web-viajes:sha-<short>  + :latest
+##   2. Build imagen migrator → ghcr.io/matucr/web-viajes:migrate
+##   3. Actualiza k8s/deployment.yaml con el nuevo sha tag
+##   4. Commitea el manifest actualizado → ArgoCD detecta el cambio y redeploya solo
+##
+## De esta forma ArgoCD nunca necesita "force sync" ni imagePullPolicy tricks.
 ## ─────────────────────────────────────────────────────────────────────────────
 name: Build & Push Docker Image
 
@@ -27,15 +30,19 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # necesario para pushear el manifest actualizado
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME_LC=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Set lowercase image name and short SHA
+        run: |
+          echo "IMAGE_NAME_LC=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "SHORT_SHA=$(echo '${{ github.sha }}' | cut -c1-7)" >> $GITHUB_ENV
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -43,15 +50,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -62,8 +60,9 @@ jobs:
           context: .
           target: runner
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:sha-${{ env.SHORT_SHA }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -77,3 +76,24 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:migrate
           cache-from: type=gha
           platforms: linux/amd64
+
+      ## ── GitOps: actualizar el tag en k8s/deployment.yaml ──────────────────
+      ## ArgoCD monitorea este archivo — al cambiar el tag detecta el nuevo
+      ## deploy y sincroniza automáticamente sin intervención manual.
+      - name: Update image tag in k8s/deployment.yaml
+        run: |
+          NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:sha-${{ env.SHORT_SHA }}"
+          # Reemplaza la línea de imagen del container app (no el initContainer migrate)
+          sed -i "s|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:sha-.*|image: ${NEW_IMAGE}|g" k8s/deployment.yaml
+          sed -i "s|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:latest|image: ${NEW_IMAGE}|g" k8s/deployment.yaml
+          echo "Updated to: ${NEW_IMAGE}"
+          grep "image:" k8s/deployment.yaml
+
+      - name: Commit and push updated manifest
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/deployment.yaml
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore(deploy): bump app image to sha-${{ env.SHORT_SHA }} [skip ci]"
+          git push
