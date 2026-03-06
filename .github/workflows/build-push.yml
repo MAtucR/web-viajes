@@ -1,17 +1,10 @@
 ## ─────────────────────────────────────────────────────────────────────────────
 ## build-push.yml — Buildea y pushea la imagen a ghcr.io en cada push a main
 ##
-## La imagen resultante será:
-##   ghcr.io/matucr/web-viajes:latest
-##   ghcr.io/matucr/web-viajes:sha-<commit_short>
-##
-## Para que k8s pueda pullear la imagen privada, crear el secret manualmente:
-##   kubectl create secret docker-registry ghcr-secret \
-##     --namespace viaja-con-moni \
-##     --docker-server=ghcr.io \
-##     --docker-username=MAtucR \
-##     --docker-password=<PAT con scope read:packages> \
-##     --docker-email=tu@email.com
+## Imágenes resultantes:
+##   ghcr.io/matucr/web-viajes:latest          ← app Next.js
+##   ghcr.io/matucr/web-viajes:sha-<short>     ← app Next.js taggeada por commit
+##   ghcr.io/matucr/web-viajes:migrate         ← imagen con prisma CLI para k8s initContainer
 ## ─────────────────────────────────────────────────────────────────────────────
 name: Build & Push Docker Image
 
@@ -60,13 +53,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Build and push app image
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: runner
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push migrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: migrator
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:migrate
+          cache-from: type=gha
           platforms: linux/amd64
