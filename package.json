@@ -10,7 +10,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
-    "db:reset-passwords": "npx tsx scripts/reset-passwords.ts"
+    "db:reset-passwords": "node scripts/reset-passwords.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.2",

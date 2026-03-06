@@ -36,7 +36,7 @@ RUN npm run build
 # ─────────────────────────────────────────────
 # Stage 3: migrator
 # Corre migraciones + seed del admin en el initContainer de k8s.
-# No necesita tsx — el seed es JS puro.
+# Tiene todos los node_modules (incluyendo bcryptjs).
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS migrator
 
@@ -48,7 +48,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma       ./prisma
 COPY package.json ./
 
-# Script de arranque: migraciones + seed admin
 CMD ["/bin/sh", "-c", "node_modules/.bin/prisma migrate deploy && node prisma/seed.js"]
 
 # ─────────────────────────────────────────────
@@ -72,9 +71,15 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static     ./.next/static
 
 # Prisma client (query engine) para runtime de la app
-COPY --from=deps /app/node_modules/.prisma  ./node_modules/.prisma
-COPY --from=deps /app/node_modules/@prisma  ./node_modules/@prisma
-COPY --from=deps /app/prisma                ./prisma
+COPY --from=deps /app/node_modules/.prisma    ./node_modules/.prisma
+COPY --from=deps /app/node_modules/@prisma    ./node_modules/@prisma
+COPY --from=deps /app/prisma                  ./prisma
+
+# bcryptjs: necesario para prisma/seed.js y scripts/reset-passwords.js
+COPY --from=deps /app/node_modules/bcryptjs   ./node_modules/bcryptjs
+
+# Scripts de administración (seed, reset de contraseñas, etc.)
+COPY scripts/ ./scripts/
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
