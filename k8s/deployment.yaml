@@ -65,7 +65,7 @@ spec:
         ## Ahora se especifica el tag en el ConfigMap o directamente en CI/CD
         ## con 'kubectl set image', igual que el container principal.
         - name: migrate
-          image: ghcr.io/matucr/web-viajes:latest
+          image: ghcr.io/matucr/web-viajes:sha-1b8678b
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -83,7 +83,7 @@ spec:
 
       containers:
         - name: app
-          image: ghcr.io/matucr/web-viajes:latest
+          image: ghcr.io/matucr/web-viajes:sha-1b8678b
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
