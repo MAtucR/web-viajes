@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { hashPassword } from '@/lib/crypto';
 
-function hashPassword(p: string) {
-  return createHash('sha256').update(p).digest('hex');
-}
+/** Regex básica para validar email — más robusta que solo buscar '@' */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
   let body: any;
@@ -16,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   if (!name  || typeof name  !== 'string' || name.trim().length < 2)
     return NextResponse.json({ error: 'Nombre inválido (mínimo 2 caracteres)' }, { status: 400 });
-  if (!email || typeof email !== 'string' || !email.includes('@'))
+  if (!email || typeof email !== 'string' || !EMAIL_RE.test(email))
     return NextResponse.json({ error: 'Email inválido' }, { status: 400 });
   if (!password || typeof password !== 'string' || password.length < 6)
     return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 });
@@ -29,7 +28,7 @@ export async function POST(req: NextRequest) {
     data: {
       name:     name.trim(),
       email:    email.toLowerCase(),
-      password: hashPassword(password),
+      password: await hashPassword(password),
       phone:    phone?.trim() || null,
       role:     'USER',
     },

@@ -1,11 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { createHash } from 'crypto';
 import { prisma } from './prisma';
-
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
-}
+import { verifyPassword } from './crypto';
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
@@ -25,7 +21,7 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.password) return null;
-        if (user.password !== hashPassword(credentials.password)) return null;
+        if (!await verifyPassword(credentials.password, user.password)) return null;
         if (user.active === false) return null;
 
         return {
@@ -49,7 +45,7 @@ export const authOptions: NextAuthOptions = {
       }
       // Permitir update de session (cuando el usuario edita su perfil)
       if (trigger === 'update' && session) {
-        if (session.name)      token.name      = session.name;
+        if (session.name)                    token.name      = session.name;
         if (session.avatarUrl !== undefined) token.avatarUrl = session.avatarUrl;
         if (session.phone     !== undefined) token.phone     = session.phone;
       }
