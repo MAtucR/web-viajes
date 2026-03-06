@@ -1,28 +1,51 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 export default function EnrollForm({ tripId, tripTitle }: { tripId: string; tripTitle: string }) {
-  const [form, setForm]   = useState({ name: '', email: '', phone: '', message: '' });
-  const [status, setStatus] = useState<'idle'|'loading'|'success'|'error'>('idle');
+  // useRef en lugar de useState para los campos — evita re-renders por keystroke
+  // que en Android cierran el teclado virtual
+  const nameRef    = useRef<HTMLInputElement>(null);
+  const emailRef   = useRef<HTMLInputElement>(null);
+  const phoneRef   = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errMsg, setErrMsg] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
-
   const handleSubmit = async () => {
-    if (!form.name || !form.email) { setErrMsg('Nombre y email son requeridos'); return; }
-    setStatus('loading'); setErrMsg('');
+    const name    = nameRef.current?.value.trim()    ?? '';
+    const email   = emailRef.current?.value.trim()   ?? '';
+    const phone   = phoneRef.current?.value.trim()   ?? '';
+    const message = messageRef.current?.value.trim() ?? '';
+
+    if (!name || !email) {
+      setErrMsg('Nombre y email son requeridos');
+      return;
+    }
+    if (!email.includes('@')) {
+      setErrMsg('Email inválido');
+      return;
+    }
+
+    setStatus('loading');
+    setErrMsg('');
+
     try {
       const res = await fetch('/api/enrollments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tripId, ...form }),
+        body: JSON.stringify({ tripId, name, email, phone: phone || undefined, message: message || undefined }),
       });
-      if (!res.ok) throw new Error(await res.text());
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error desconocido');
+      }
+
       setStatus('success');
-    } catch {
+    } catch (e: any) {
       setStatus('error');
-      setErrMsg('Hubo un error. Intentá de nuevo o contactanos por WhatsApp.');
+      setErrMsg(e.message ?? 'Hubo un error. Intentá de nuevo o contactanos por WhatsApp.');
     }
   };
 
@@ -39,26 +62,67 @@ export default function EnrollForm({ tripId, tripTitle }: { tripId: string; trip
   return (
     <div>
       <div className="form-group">
-        <label>Nombre completo *</label>
-        <input name="name" value={form.name} onChange={handleChange} placeholder="Tu nombre" />
+        <label htmlFor="enroll-name">Nombre completo *</label>
+        <input
+          id="enroll-name"
+          ref={nameRef}
+          name="name"
+          type="text"
+          placeholder="Tu nombre"
+          autoComplete="name"
+          defaultValue=""
+        />
       </div>
       <div className="form-group">
-        <label>Email *</label>
-        <input name="email" type="email" value={form.email} onChange={handleChange} placeholder="tu@email.com" />
+        <label htmlFor="enroll-email">Email *</label>
+        <input
+          id="enroll-email"
+          ref={emailRef}
+          name="email"
+          type="email"
+          placeholder="tu@email.com"
+          autoComplete="email"
+          inputMode="email"
+          defaultValue=""
+        />
       </div>
       <div className="form-group">
-        <label>Teléfono / WhatsApp</label>
-        <input name="phone" value={form.phone} onChange={handleChange} placeholder="+54 9 11 1234-5678" />
+        <label htmlFor="enroll-phone">Teléfono / WhatsApp</label>
+        <input
+          id="enroll-phone"
+          ref={phoneRef}
+          name="phone"
+          type="tel"
+          placeholder="+54 9 11 1234-5678"
+          autoComplete="tel"
+          inputMode="tel"
+          defaultValue=""
+        />
       </div>
       <div className="form-group">
-        <label>Mensaje (opcional)</label>
-        <textarea name="message" value={form.message} onChange={handleChange}
-          rows={3} placeholder="¿Alguna consulta o necesidad especial?" />
+        <label htmlFor="enroll-message">Mensaje (opcional)</label>
+        <textarea
+          id="enroll-message"
+          ref={messageRef}
+          name="message"
+          rows={3}
+          placeholder="¿Alguna consulta o necesidad especial?"
+          defaultValue=""
+        />
       </div>
-      {errMsg && <p style={{ color: '#dc2626', marginBottom: '1rem', fontSize: '0.9rem' }}>{errMsg}</p>}
-      <button className="btn-primary" onClick={handleSubmit} disabled={status === 'loading'}
+
+      {errMsg && (
+        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.75rem 1rem', color: '#dc2626', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          ⚠️ {errMsg}
+        </div>
+      )}
+
+      <button
+        className="btn-primary"
+        onClick={handleSubmit}
+        disabled={status === 'loading'}
         style={{ width: '100%', opacity: status === 'loading' ? 0.6 : 1 }}>
-        {status === 'loading' ? 'Enviando...' : '✈️ Inscribirme'}
+        {status === 'loading' ? '⏳ Enviando...' : '✈️ Inscribirme'}
       </button>
     </div>
   );
