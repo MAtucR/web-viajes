@@ -47,21 +47,43 @@ model VerificationToken {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  name        String?
-  phone       String?
-  password    String?
-  role        Role         @default(USER)
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  accounts    Account[]
-  sessions    Session[]
-  trips       Trip[]
-  enrollments Enrollment[]
+  id                 String               @id @default(cuid())
+  email              String               @unique
+  name               String?
+  phone              String?
+  password           String?
+  avatarUrl          String?
+  role               Role                 @default(USER)
+  active             Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  accounts           Account[]
+  sessions           Session[]
+  trips              Trip[]
+  enrollments        Enrollment[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
 }
 
 model Trip {
@@ -104,9 +126,9 @@ model Enrollment {
 }
 
 enum Role {
-  USER   // Viajero registrado
-  GUIDE  // Guía de viajes — puede ver sus grupos asignados
-  ADMIN  // Acceso total
+  USER
+  GUIDE
+  ADMIN
 }
 
 enum EnrollmentStatus {
