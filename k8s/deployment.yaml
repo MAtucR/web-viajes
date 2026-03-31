@@ -75,7 +75,7 @@ spec:
           ## Alternativa a largo plazo: convertir la migración en un Job separado.
 
         - name: migrate
-          image: ghcr.io/matucr/web-viajes:sha-8e3e31a
+          image: ghcr.io/matucr/web-viajes:sha-b5efb20
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -93,7 +93,7 @@ spec:
 
       containers:
         - name: app
-          image: ghcr.io/matucr/web-viajes:sha-8e3e31a
+          image: ghcr.io/matucr/web-viajes:sha-b5efb20
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
