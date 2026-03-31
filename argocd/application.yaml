@@ -7,6 +7,9 @@
 ##        kubectl wait --for=condition=available --timeout=120s deployment/cert-manager -n cert-manager
 ##   2. ClusterIssuer creado:
 ##        kubectl apply -f prereqs/cluster-issuer.yaml
+##   3. Istio instalado con extensionProvider OTel:
+##        istioctl install --set profile=default -y
+##        istioctl install -f prereqs/istio-meshconfig-patch.yaml
 ##
 ## Aplicar con:
 ##   kubectl apply -f argocd/application.yaml
@@ -25,6 +28,12 @@ spec:
     repoURL: https://github.com/MAtucR/web-viajes.git
     targetRevision: main
     path: k8s
+    ## directory.recurse: true permite sincronizar subdirectorios de k8s/.
+    ## Necesario para incluir k8s/istio/ (Gateway, VirtualService, PeerAuth, etc.)
+    directory:
+      recurse: true
+      ## Excluir cualquier archivo que no sea YAML/JSON para evitar errores de parse
+      exclude: "*.md"
 
   destination:
     server: https://kubernetes.default.svc
@@ -38,8 +47,9 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
-      ## Sin esta opción, un CRD desconocido (ej: cert-manager no instalado)
-      ## aborta todo el sync y ningún recurso se aplica.
+      ## SkipDryRunOnMissingResource: si un CRD de Istio no está instalado aún
+      ## (ej: NetworkingV1Beta1, SecurityV1Beta1), ArgoCD omite ese recurso
+      ## en lugar de abortar todo el sync. Crítico durante la migración.
       - SkipDryRunOnMissingResource=true
     retry:
       limit: 5
@@ -49,8 +59,23 @@ spec:
         maxDuration: 3m
 
   ignoreDifferences:
+    ## ArgoCD no controla los labels del Namespace (gestionados por el cluster)
     - group: ""
       kind: Namespace
       jsonPointers:
         - /metadata/labels
         - /metadata/annotations
+    ## Istio puede mutar VirtualService/DestinationRule con campos internos.
+    ## Ignorar para evitar sync loops causados por el webhook de Istio.
+    - group: networking.istio.io
+      kind: VirtualService
+      jsonPointers:
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+    - group: networking.istio.io
+      kind: DestinationRule
+      jsonPointers:
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+    - group: security.istio.io
+      kind: PeerAuthentication
+      jsonPointers:
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration

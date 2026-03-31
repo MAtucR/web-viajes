@@ -3,6 +3,18 @@
 ##
 ## Recurso cluster-scoped. ArgoCD lo gestiona con CreateNamespace=true
 ## y clusterResourceWhitelist en el proyecto default.
+##
+## ISTIO: El label `istio-injection: enabled` activa la inyección automática
+## del sidecar Envoy (istio-proxy) en todos los Pods del namespace.
+##
+## POST-MIGRACIÓN — Después de aplicar este archivo, reiniciar los Pods para
+## que el webhook de Istio inyecte el sidecar en los pods existentes:
+##   kubectl rollout restart deployment/viaja-con-moni-app -n viaja-con-moni
+##   kubectl rollout restart statefulset/postgres -n viaja-con-moni
+##
+## Verificar inyección:
+##   kubectl get pods -n viaja-con-moni -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].name}{"\n"}{end}'
+##   (deben aparecer 2 containers por pod: app + istio-proxy)
 ## ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Namespace
@@ -12,3 +24,8 @@ metadata:
     argocd.argoproj.io/sync-wave: "-3"
   labels:
     app.kubernetes.io/part-of: viaja-con-moni
+    ## ── Istio Sidecar Injection ───────────────────────────────────────────────
+    ## Habilita la inyección automática del proxy Envoy en todos los Pods.
+    ## Requiere que Istio esté instalado y el webhook MutatingAdmissionWebhook
+    ## esté activo en el cluster.
+    istio-injection: enabled

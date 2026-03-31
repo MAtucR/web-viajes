@@ -1,0 +1,121 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## k8s/istio/gateway.yaml
+## Gateway + VirtualService de Istio
+##
+## REEMPLAZA: k8s/ingress.yaml (Traefik Ingress)
+## Una vez validado este Gateway, eliminar o deshabilitar ingress.yaml.
+##
+## PREREQUISITO: Istio instalado con IngressGateway expuesto:
+##   istioctl install --set profile=default -y
+##   kubectl get svc istio-ingressgateway -n istio-system
+##
+## El IngressGateway es el punto de entrada externo al mesh.
+## El VirtualService define cómo se enruta el tráfico internamente.
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: viaja-con-moni-gateway
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  ## Selector del pod del IngressGateway de Istio (en istio-system).
+  ## Verificar label con:
+  ##   kubectl get pods -n istio-system -l istio=ingressgateway --show-labels
+  selector:
+    istio: ingressgateway
+
+  servers:
+    ## ── HTTP ─────────────────────────────────────────────────────────────────
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "viajaconmoni.com"
+        - "www.viajaconmoni.com"
+      ## Activar redirección automática HTTP → HTTPS cuando el cert esté listo.
+      ## Descomentar junto con el bloque HTTPS de abajo:
+      # tls:
+      #   httpsRedirect: true
+
+    ## ── HTTPS — descomentar cuando DNS + certificado TLS estén listos ─────────
+    ##
+    ## Paso 1: Crear el Secret TLS en el namespace istio-system (no en la app).
+    ##   Opción A — cert-manager con ClusterIssuer (recomendado):
+    ##     Aplicar prereqs/cluster-issuer.yaml y agregar annotation al Gateway
+    ##   Opción B — manual:
+    ##     kubectl create secret tls viajaconmoni-tls \
+    ##       --cert=tls.crt --key=tls.key -n istio-system
+    ##
+    ## Paso 2: Descomentar el bloque siguiente y hacer commit.
+    # - port:
+    #     number: 443
+    #     name: https
+    #     protocol: HTTPS
+    #   tls:
+    #     mode: SIMPLE
+    #     ## IMPORTANTE: el Secret debe estar en istio-system, no en viaja-con-moni.
+    #     ## Es leído directamente por el pod del IngressGateway.
+    #     credentialName: viajaconmoni-tls
+    #   hosts:
+    #     - "viajaconmoni.com"
+    #     - "www.viajaconmoni.com"
+
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: viaja-con-moni-vs
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  hosts:
+    - "viajaconmoni.com"
+    - "www.viajaconmoni.com"
+  ## gateways: especifica por qué punto de entrada aplica este ruteo.
+  ## "mesh" se puede agregar si también queremos esta regla para tráfico interno.
+  gateways:
+    - viaja-con-moni-gateway
+  http:
+    ## ── Ruta principal → Next.js App ─────────────────────────────────────────
+    - name: viaja-con-moni-route
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: viaja-con-moni-service
+            port:
+              number: 80
+            ## subset: v1  # Descomentar para usar subsets del DestinationRule
+          ## weight: 100   # Útil para canary: weight: 90 aquí + weight: 10 en v2
+      ## Timeout generoso para SSR de Next.js (cold start puede tardar)
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        ## gateway-error: 502/503/504 del IngressGateway
+        ## connect-failure: el upstream no responde
+        ## retriable-4xx: 409 Conflict (seguro de reintentar)
+        retryOn: "gateway-error,connect-failure,retriable-4xx"
+      ## Headers de seguridad inyectados por Envoy — sin modificar la app
+      headers:
+        response:
+          add:
+            X-Frame-Options: "SAMEORIGIN"
+            X-Content-Type-Options: "nosniff"
+            Referrer-Policy: "strict-origin-when-cross-origin"
+          ## Eliminar headers que revelan info del servidor
+          remove:
+            - "x-powered-by"
+            - "server"

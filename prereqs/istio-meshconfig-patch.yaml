@@ -1,0 +1,113 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## prereqs/istio-meshconfig-patch.yaml
+## IstioOperator — Parche de MeshConfig para registrar el extensionProvider OTel
+##
+## ⚠ APLICAR MANUALMENTE — NO sincronizado por ArgoCD.
+## Este archivo requiere permisos cluster-admin y modifica la configuración
+## global de Istio. Aplicar una sola vez durante el setup inicial.
+##
+## MÉTODO 1 — istioctl (recomendado si Istio fue instalado con istioctl):
+##   istioctl install -f prereqs/istio-meshconfig-patch.yaml --dry-run
+##   istioctl install -f prereqs/istio-meshconfig-patch.yaml
+##
+## MÉTODO 2 — Patch directo al ConfigMap (si no se usa IstioOperator):
+##   kubectl edit configmap istio -n istio-system
+##   → Agregar bajo la clave `mesh:` la sección extensionProviders
+##
+## VERIFICAR que el extensionProvider quedó registrado:
+##   kubectl get configmap istio -n istio-system -o jsonpath='{.data.mesh}' | grep -A5 extensionProviders
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  ## Nombre del IstioOperator existente. Verificar con:
+  ##   kubectl get istiooperators -n istio-system
+  name: installed-state
+  namespace: istio-system
+spec:
+  meshConfig:
+    ## Habilitar tracing distribuido globalmente
+    enableTracing: true
+
+    defaultConfig:
+      ## Sampling global como fallback. El recurso Telemetry por namespace
+      ## (k8s/istio/telemetry.yaml) overridea este valor.
+      tracing:
+        sampling: 100.0
+
+    ## ── extensionProviders ───────────────────────────────────────────────────
+    ## Define los backends de telemetría disponibles para los recursos Telemetry.
+    ## El campo `name` debe coincidir EXACTAMENTE con lo referenciado en
+    ## k8s/istio/telemetry.yaml → spec.tracing[].providers[].name
+    extensionProviders:
+      - name: otel-tracing
+        opentelemetry:
+          ## ── OPCIÓN A: OTel Collector propio en el cluster (RECOMENDADO) ────
+          ## Instalar con Helm:
+          ##   helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          ##   helm install otel-collector open-telemetry/opentelemetry-collector \
+          ##     --namespace observability --create-namespace
+          ##
+          ## El Collector actúa como buffer/router: recibe trazas de Envoy vía
+          ## gRPC y las exporta a Dynatrace via OTLP/HTTP con el API token.
+          ## Esto desacopla la configuración de Dynatrace del MeshConfig de Istio.
+          service: "opentelemetry-collector.observability.svc.cluster.local"
+          port: 4317  # gRPC OTLP
+
+          ## ── OPCIÓN B: Dynatrace ActiveGate / OTLP endpoint directo ──────────
+          ## Sin Collector intermedio. El Envoy exporta directamente a Dynatrace.
+          ## LIMITACIÓN: El MeshConfig no soporta headers de autenticación nativamente
+          ## para opentelemetry. Usar esta opción solo si el endpoint es accesible
+          ## sin auth (red privada) o si se usa mTLS con certificado de cliente.
+          ##
+          ## service: "<YOUR_ENV_ID>.live.dynatrace.com"
+          ## port: 443
+          ##
+          ## Para OTLP/HTTP en lugar de gRPC (más compatible con firewalls):
+          ## Reemplazar el bloque opentelemetry por:
+          ## opentelemetry:
+          ##   service: "<YOUR_ENV_ID>.live.dynatrace.com"
+          ##   port: 443
+          ##   http:
+          ##     path: "/api/v2/otlp/v1/traces"
+          ##     headers:
+          ##       - name: Authorization
+          ##         value: "Api-Token <YOUR_DYNATRACE_API_TOKEN>"
+
+## ─────────────────────────────────────────────────────────────────────────────
+## CONFIGURACIÓN RECOMENDADA DEL OTel COLLECTOR (Opción A)
+## Guardar como prereqs/otel-collector-values.yaml y aplicar con Helm.
+##
+## El Collector recibe de Istio/Envoy vía OTLP gRPC (4317) y exporta a
+## Dynatrace via OTLP/HTTP con el API token en el header Authorization.
+## ─────────────────────────────────────────────────────────────────────────────
+##
+## prereqs/otel-collector-values.yaml (referencia — crear archivo separado):
+##
+## config:
+##   receivers:
+##     otlp:
+##       protocols:
+##         grpc:
+##           endpoint: 0.0.0.0:4317
+##         http:
+##           endpoint: 0.0.0.0:4318
+##   processors:
+##     batch:
+##       timeout: 5s
+##     resource:
+##       attributes:
+##         - key: deployment.environment
+##           value: production
+##           action: upsert
+##   exporters:
+##     otlphttp/dynatrace:
+##       endpoint: "https://<YOUR_ENV_ID>.live.dynatrace.com/api/v2/otlp"
+##       headers:
+##         Authorization: "Api-Token <YOUR_DYNATRACE_API_TOKEN>"
+##   service:
+##     pipelines:
+##       traces:
+##         receivers:  [otlp]
+##         processors: [batch, resource]
+##         exporters:  [otlphttp/dynatrace]

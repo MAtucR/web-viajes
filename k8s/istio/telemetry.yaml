@@ -1,0 +1,76 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## k8s/istio/telemetry.yaml
+## Telemetría de Istio — Distributed Tracing hacia Dynatrace vía OTLP
+##
+## Este recurso configura cómo Envoy genera y exporta trazas distribuidas.
+## Las trazas viajan: Envoy sidecar → OTel Collector → Dynatrace OTLP endpoint
+##
+## PREREQUISITOS:
+##   1. Definir el extensionProvider "otel-tracing" en el MeshConfig de Istio.
+##      Ver: prereqs/istio-meshconfig-patch.yaml
+##      Aplicar: istioctl install -f prereqs/istio-meshconfig-patch.yaml
+##
+##   2. OTel Collector corriendo en el cluster (namespace observability):
+##      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+##      helm install otel-collector open-telemetry/opentelemetry-collector \
+##        --namespace observability --create-namespace \
+##        -f prereqs/otel-collector-values.yaml
+##
+## CONTEXTO DYNATRACE:
+##   El módulo nativo de Envoy para OneAgent está deprecado.
+##   La ruta recomendada es OTLP → Dynatrace OTLP ingest endpoint.
+##   Ref: https://docs.dynatrace.com/docs/extend-dynatrace/opentelemetry/getting-started/tracing
+## ─────────────────────────────────────────────────────────────────────────────
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: viaja-con-moni-tracing
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  ## Sin `selector` → aplica a TODOS los pods del namespace viaja-con-moni.
+  ## Para scoping por workload específico, agregar:
+  ## selector:
+  ##   matchLabels:
+  ##     app: viaja-con-moni-app
+
+  tracing:
+    - providers:
+        ## DEBE coincidir EXACTAMENTE con el campo `name` del extensionProvider
+        ## definido en el MeshConfig (prereqs/istio-meshconfig-patch.yaml).
+        - name: otel-tracing
+
+      ## Porcentaje de requests que generan trazas.
+      ## 100% recomendado en staging/QA para visibilidad completa.
+      ## Reducir a 10-20% en producción con alto volumen para minimizar overhead.
+      randomSamplingPercentage: 100.0
+
+      ## ── Custom Tags ──────────────────────────────────────────────────────────
+      ## Atributos adicionales añadidos a cada span por Envoy.
+      ## Facilitan el filtrado y correlación en Dynatrace.
+      customTags:
+        ## Entorno de despliegue — para separar prod/staging en Dynatrace
+        deployment.environment:
+          literal:
+            value: "production"
+
+        ## Namespace de Kubernetes — propagado desde la variable de entorno del pod
+        k8s.namespace.name:
+          environment:
+            name: POD_NAMESPACE
+            defaultValue: "viaja-con-moni"
+
+        ## Versión de la app — leída desde un header HTTP custom si está presente
+        ## La app puede inyectar este header en sus responses: X-App-Version: 1.2.3
+        app.version:
+          header:
+            name: x-app-version
+            defaultValue: "unknown"
+
+        ## Servicio de origen — útil para correlacionar trazas entre microservicios
+        service.name:
+          literal:
+            value: "viaja-con-moni-app"

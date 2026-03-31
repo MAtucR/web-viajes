@@ -1,5 +1,5 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## deployment.yaml — Next.js App en k3s
+## deployment.yaml — Next.js App + Istio Service Mesh
 ## ─────────────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -28,8 +28,18 @@ spec:
         app: viaja-con-moni-app
         app.kubernetes.io/name:    viaja-con-moni-app
         app.kubernetes.io/part-of: viaja-con-moni
+        ## ── Istio: requerido para DestinationRule subsets ────────────────────
+        ## Permite enrutar tráfico a subsets específicos (canary, blue-green).
+        ## Cambiar a "v2" al desplegar una nueva versión en paralelo.
+        version: "v1"
       annotations:
         secret.reloader.stakater.com/reload: "app-secret"
+        ## ── Istio: garantiza que el proxy Envoy esté listo ANTES de que
+        ## arranque el contenedor principal. Evita race conditions donde la app
+        ## intenta conectarse al mesh antes de que el sidecar esté activo.
+        ## Descomentar cuando Istio esté instalado en el cluster:
+        ## proxy.istio.io/config: |
+        ##   holdApplicationUntilProxyStarts: true
     spec:
       imagePullSecrets:
         - name: ghcr-secret
@@ -58,6 +68,11 @@ spec:
                 sleep 2
               done
               echo "PostgreSQL disponible ✅"
+          ## ── NOTA ISTIO ───────────────────────────────────────────────────────
+          ## Los initContainers se ejecutan SIN el sidecar Envoy activo en este
+          ## pod. El tráfico va directo a postgres-service.
+          ## Por eso postgres usa PeerAuthentication PERMISSIVE (ver peer-auth).
+          ## Alternativa a largo plazo: convertir la migración en un Job separado.
 
         - name: migrate
           image: ghcr.io/matucr/web-viajes:sha-8e3e31a
@@ -97,10 +112,8 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: NEXTAUTH_SECRET
-            ## NEXTAUTH_URL debe coincidir EXACTAMENTE con la URL desde donde se
-            ## accede al sitio. Mientras el ingress no tenga dominio + TLS activo,
-            ## usar la IP pública con http://.
-            ## Cuando se active el dominio con HTTPS, cambiar a https://viajaconmoni.com
+            ## NEXTAUTH_URL: actualizar al dominio real con HTTPS una vez que
+            ## el Gateway de Istio esté configurado con TLS.
             - name: NEXTAUTH_URL
               value: "http://181.209.94.221"
             - name: PORT

@@ -1,0 +1,97 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## k8s/istio/destination-rules.yaml
+## DestinationRules — política de tráfico saliente hacia cada servicio
+##
+## Define cómo el proxy Envoy del cliente se conecta al upstream:
+## modo TLS, balanceo de carga, pool de conexiones y circuit breaker.
+##
+## RELACIÓN CON PeerAuthentication:
+##   PeerAuthentication → controla cómo el SERVIDOR autentica conexiones entrantes
+##   DestinationRule    → controla cómo el CLIENTE establece conexiones salientes
+## Ambos deben estar alineados: DR con ISTIO_MUTUAL + PA con STRICT/PERMISSIVE.
+## ─────────────────────────────────────────────────────────────────────────────
+
+## ── Next.js App ───────────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: viaja-con-moni-app-dr
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  host: viaja-con-moni-service
+  trafficPolicy:
+    ## mTLS automático usando los certificados SPIFFE emitidos por Istiod.
+    ## Envoy negocia TLS en nombre de la app — sin cambios en el código.
+    tls:
+      mode: ISTIO_MUTUAL
+    loadBalancer:
+      ## LEAST_CONN: envía al pod con menos conexiones activas.
+      ## Más adecuado que ROUND_ROBIN para SSR con tiempos de respuesta variables.
+      simple: LEAST_CONN
+    connectionPool:
+      http:
+        http1MaxPendingRequests:  100
+        http2MaxRequests:         1000
+        ## UPGRADE: Envoy negocia HTTP/2 si el upstream lo soporta.
+        ## Next.js 14+ soporta HTTP/2 en modo standalone.
+        h2UpgradePolicy: UPGRADE
+    ## ── Circuit Breaker ───────────────────────────────────────────────────────
+    ## Expulsa temporalmente del pool a pods que fallen consecutivamente.
+    ## Previene que un pod degradado siga recibiendo tráfico.
+    outlierDetection:
+      consecutive5xxErrors: 5      # Errores 5xx consecutivos antes de expulsar
+      interval:             10s    # Ventana de evaluación
+      baseEjectionTime:     30s    # Tiempo mínimo fuera del pool
+      maxEjectionPercent:   50     # Máximo 50% de pods expulsados simultáneamente
+  ## ── Subsets para Canary / Blue-Green ─────────────────────────────────────
+  ## Requiere el label `version: "v1"` en los pods (ya agregado en deployment.yaml).
+  ## Para usar: descomentar `subset: v1` en el VirtualService.
+  subsets:
+    - name: v1
+      labels:
+        version: "v1"
+    ## - name: v2             # Agregar cuando se despliegue una nueva versión
+    ##   labels:
+    ##     version: "v2"
+
+---
+
+## ── PostgreSQL ────────────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: postgres-dr
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  host: postgres-service
+  trafficPolicy:
+    ## ISTIO_MUTUAL: el sidecar Envoy del cliente (app) usa certificados SPIFFE
+    ## para conectarse a postgres. Compatible con PeerAuthentication PERMISSIVE
+    ## en el pod de postgres (acepta tanto mTLS como plaintext).
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        ## PostgreSQL es stateful: conexiones de larga duración. Limitar el pool
+        ## protege al pod de postgres de sobrecarga de conexiones.
+        maxConnections: 20
+        connectTimeout: 5s
+        ## TCP keepalive: detecta conexiones caídas sin esperar al timeout de la app
+        tcpKeepalive:
+          time:      7200s  # 2 horas (estándar Linux)
+          interval:  75s
+    outlierDetection:
+      ## Para TCP, se usa consecutiveErrors (no 5xx)
+      consecutiveErrors: 3
+      interval:          30s
+      baseEjectionTime:  60s

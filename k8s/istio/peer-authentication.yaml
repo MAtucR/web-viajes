@@ -1,0 +1,66 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## k8s/istio/peer-authentication.yaml
+## Políticas de mTLS para el namespace viaja-con-moni
+##
+## PeerAuthentication define cómo los sidecars Envoy autentican las conexiones
+## entrantes: STRICT exige mTLS, PERMISSIVE acepta ambos (mTLS + plaintext).
+##
+## DISEÑO DE SEGURIDAD:
+##   - App Next.js  → STRICT:     todo el tráfico de/hacia la app usa mTLS
+##   - PostgreSQL   → PERMISSIVE: necesario por los initContainers del Deployment
+##
+## ¿Por qué PERMISSIVE en postgres?
+## Los initContainers `wait-for-postgres` y `migrate` del Deployment se ejecutan
+## ANTES de que el sidecar Envoy esté activo en el pod de la app. Sus conexiones
+## a postgres-service:5432 son texto plano. Con STRICT en postgres, el Envoy del
+## pod de postgres rechazaría esas conexiones y el arranque fallaría.
+##
+## RECOMENDACIÓN A FUTURO: Extraer la migración de BD a un Job de Kubernetes
+## con ServiceAccount propio. Así se puede aplicar STRICT a postgres también.
+## ─────────────────────────────────────────────────────────────────────────────
+
+## ── mTLS STRICT para la app Next.js ──────────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: viaja-con-moni-mtls-strict
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name:    viaja-con-moni-app
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  selector:
+    matchLabels:
+      app: viaja-con-moni-app
+  mtls:
+    mode: STRICT
+
+---
+
+## ── mTLS PERMISSIVE para PostgreSQL ──────────────────────────────────────────
+## Acepta tanto mTLS (desde pods con sidecar) como plaintext (desde initContainers).
+## Los pods del cluster con sidecar Envoy SIEMPRE usarán mTLS automáticamente
+## gracias al DestinationRule con tls.mode: ISTIO_MUTUAL.
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: postgres-mtls-permissive
+  namespace: viaja-con-moni
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name:    postgres
+    app.kubernetes.io/part-of: viaja-con-moni
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  mtls:
+    mode: PERMISSIVE
+  ## Alternativa más granular: PERMISSIVE solo en el puerto de postgres,
+  ## STRICT para cualquier otro puerto que pueda surgir en el futuro:
+  ## portLevelMtls:
+  ##   5432:
+  ##     mode: PERMISSIVE
