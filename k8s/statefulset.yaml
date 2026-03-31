@@ -4,13 +4,29 @@
 ## ─────────────────────────────────────────────────────────────────────────────
 
 ## ── PersistentVolumeClaim ────────────────────────────────────────────────────
+## ⚠ WAVE "0" — igual que el StatefulSet. NO usar wave "-1" aquí.
+##
+## MOTIVO: el StorageClass local-path usa volumeBindingMode: WaitForFirstConsumer.
+## Esto significa que el PVC permanece en estado Pending HASTA que un Pod lo solicita.
+## ArgoCD considera un PVC en Pending como "Progressing" (no Healthy), por lo que
+## bloquea el avance al siguiente wave indefinidamente → deadlock.
+##
+## SOLUCIÓN: PVC y StatefulSet en el mismo wave (0). ArgoCD los aplica juntos;
+## el Pod del StatefulSet provoca el binding del PVC y ambos quedan Healthy.
+##
+## IMPORTANTE: No borrar este PVC manualmente. Contiene los datos de PostgreSQL.
+## Para backup antes de cualquier intervención:
+##   kubectl exec -n viaja-con-moni postgres-0 -- pg_dumpall -U $POSTGRES_USER > backup.sql
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
   namespace: viaja-con-moni
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "0"
+    ## Evita que ArgoCD intente borrar y recrear el PVC en un re-sync
+    ## (sería destructivo — perdería todos los datos de postgres).
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
   labels:
     app.kubernetes.io/name:    postgres
     app.kubernetes.io/part-of: viaja-con-moni
@@ -68,15 +84,9 @@ spec:
         version: "v1"
       annotations:
         ## ── Istio: garantiza que Envoy esté listo antes de que postgres
-        ## comience a aceptar conexiones. Crítico para que el initContainer
-        ## wait-for-postgres del Deployment encuentre el puerto activo.
-        ## Descomentar cuando Istio esté instalado:
+        ## comience a aceptar conexiones. Descomentar cuando Istio esté instalado:
         ## proxy.istio.io/config: |
         ##   holdApplicationUntilProxyStarts: true
-        ##
-        ## ── Istio: excluir el puerto de admin de postgres del intercept de Envoy
-        ## (solo si se usan herramientas de admin directas fuera del mesh)
-        ## traffic.sidecar.istio.io/excludeInboundPorts: "5432"
     spec:
       terminationGracePeriodSeconds: 60
 
