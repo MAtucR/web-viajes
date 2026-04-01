@@ -95,7 +95,7 @@ spec:
 
       containers:
         - name: app
-          image: ghcr.io/matucr/web-viajes:sha-8dedd7c
+          image: ghcr.io/matucr/web-viajes:sha-53bf389
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
