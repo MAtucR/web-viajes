@@ -1,0 +1,82 @@
+## ─────────────────────────────────────────────────────────────────────────────
+## prereqs/otel-collector-values.yaml
+## OpenTelemetry Collector — valores para Helm, exporta trazas a Dynatrace
+##
+## SETUP (una sola vez):
+##   1. Crear el secret con el token de Dynatrace:
+##        kubectl create secret generic dt-otel-secret \
+##          --from-literal=DT_API_TOKEN="<TU_TOKEN>" \
+##          -n observability
+##
+##   2. Instalar con Helm:
+##        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+##        helm repo update
+##        helm install otel-collector open-telemetry/opentelemetry-collector \
+##          --namespace observability --create-namespace \
+##          --values prereqs/otel-collector-values.yaml
+##
+##   3. Verificar que levantó:
+##        kubectl get pods -n observability
+##
+## ACTUALIZAR si cambia el token:
+##   kubectl create secret generic dt-otel-secret \
+##     --from-literal=DT_API_TOKEN="<NUEVO_TOKEN>" \
+##     -n observability --dry-run=client -o yaml | kubectl apply -f -
+##   kubectl rollout restart deployment/otel-collector -n observability
+## ─────────────────────────────────────────────────────────────────────────────
+
+mode: deployment
+replicaCount: 1
+
+## Inyectar el token desde el Secret — nunca hardcodeado
+extraEnvsFrom:
+  - secretRef:
+      name: dt-otel-secret
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  processors:
+    batch:
+      timeout: 5s
+      send_batch_size: 512
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 200
+    resource:
+      attributes:
+        - key: deployment.environment
+          value: production
+          action: upsert
+        - key: k8s.cluster.name
+          value: tucucluster
+          action: upsert
+
+  exporters:
+    otlphttp/dynatrace:
+      ## Reemplazar <ENV_ID> con tu environment ID de Dynatrace
+      ## ej: abc12345.live.dynatrace.com
+      endpoint: "https://<ENV_ID>.live.dynatrace.com/api/v2/otlp"
+      headers:
+        Authorization: "Api-Token ${env:DT_API_TOKEN}"
+
+  service:
+    pipelines:
+      traces:
+        receivers:  [otlp]
+        processors: [memory_limiter, batch, resource]
+        exporters:  [otlphttp/dynatrace]
+
+resources:
+  requests:
+    cpu:    "50m"
+    memory: "128Mi"
+  limits:
+    cpu:    "200m"
+    memory: "256Mi"
