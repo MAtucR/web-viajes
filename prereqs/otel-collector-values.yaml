@@ -60,9 +60,7 @@ config:
 
   exporters:
     otlphttp/dynatrace:
-      ## Reemplazar <ENV_ID> con tu environment ID de Dynatrace
-      ## ej: abc12345.live.dynatrace.com
-      endpoint: "https://<ENV_ID>.live.dynatrace.com/api/v2/otlp"
+      endpoint: "https://dqk02008.live.dynatrace.com/api/v2/otlp"
       headers:
         Authorization: "Api-Token ${env:DT_API_TOKEN}"
 
