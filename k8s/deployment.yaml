@@ -37,9 +37,8 @@ spec:
         ## ── Istio: garantiza que el proxy Envoy esté listo ANTES de que
         ## arranque el contenedor principal. Evita race conditions donde la app
         ## intenta conectarse al mesh antes de que el sidecar esté activo.
-        ## Descomentar cuando Istio esté instalado en el cluster:
-        ## proxy.istio.io/config: |
-        ##   holdApplicationUntilProxyStarts: true
+        proxy.istio.io/config: |
+          holdApplicationUntilProxyStarts: true
     spec:
       imagePullSecrets:
         - name: ghcr-secret
