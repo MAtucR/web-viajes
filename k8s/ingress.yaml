@@ -1,40 +1,9 @@
 ## ─────────────────────────────────────────────────────────────────────────────
-## ingress.yaml — Traefik Ingress
+## ingress.yaml — DEPRECATED
 ##
-## MODO ACTUAL: HTTP solamente (sin TLS)
-## Para activar HTTPS cuando tengas DNS y puerto 443 expuesto:
-##   1. Aplicar prereqs/cluster-issuer.yaml
-##   2. Descomentar la sección tls: y las annotations de cert-manager
-##   3. Cambiar entrypoints a "websecure" y agregar router.tls: "true"
+## Este archivo fue reemplazado por k8s/istio/gateway.yaml
+## El Ingress de Traefik fue eliminado junto con Traefik del cluster.
+## El tráfico HTTP/HTTPS ahora entra por Istio IngressGateway.
+##
+## Ver: k8s/istio/gateway.yaml  → Gateway + VirtualService
 ## ─────────────────────────────────────────────────────────────────────────────
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: viaja-con-moni-ingress
-  namespace: viaja-con-moni
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
-    kubernetes.io/ingress.class: "traefik"
-    ## Escuchar en HTTP (puerto 80) — sin TLS por ahora
-    traefik.ingress.kubernetes.io/router.entrypoints: "web"
-  labels:
-    app.kubernetes.io/name:    viaja-con-moni-app
-    app.kubernetes.io/part-of: viaja-con-moni
-spec:
-  ## TLS desactivado hasta tener DNS + puerto 443 expuesto
-  ## tls:
-  ##   - hosts:
-  ##       - viajaconmoni.com
-  ##       - www.viajaconmoni.com
-  ##     secretName: viajaconmoni-tls
-  rules:
-    ## Regla sin host: responde a cualquier IP/hostname → para probar con IP pública
-    - http:
-        paths:
-          - path:     /
-            pathType: Prefix
-            backend:
-              service:
-                name: viaja-con-moni-service
-                port:
-                  number: 80
