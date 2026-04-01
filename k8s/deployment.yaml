@@ -71,10 +71,13 @@ spec:
           ## Los initContainers se ejecutan SIN el sidecar Envoy activo en este
           ## pod. El tráfico va directo a postgres-service.
           ## Por eso postgres usa PeerAuthentication PERMISSIVE (ver peer-auth).
-          ## Alternativa a largo plazo: convertir la migración en un Job separado.
 
         - name: migrate
-          image: ghcr.io/matucr/web-viajes:sha-8dedd7c
+          ## :migrate = stage "migrator" del Dockerfile — tiene node_modules
+          ## completo con el CLI de prisma. El stage "runner" (usado por el
+          ## container principal) NO incluye el CLI por optimización de tamaño.
+          ## El CI buildea y pushea :migrate en cada push a main.
+          image: ghcr.io/matucr/web-viajes:migrate
           imagePullPolicy: Always
           command:
             - /bin/sh
