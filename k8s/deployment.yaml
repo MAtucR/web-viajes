@@ -19,8 +19,11 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge:       1
-      maxUnavailable: 0
+      ## maxSurge: 0 + maxUnavailable: 1 → mata un pod viejo ANTES de crear
+      ## el nuevo. Necesario en clusters de un solo nodo con CPU limitada.
+      ## maxSurge: 1 requeriría tener 3 pods simultáneos durante el deploy.
+      maxSurge:       0
+      maxUnavailable: 1
 
   template:
     metadata:
@@ -28,15 +31,9 @@ spec:
         app: viaja-con-moni-app
         app.kubernetes.io/name:    viaja-con-moni-app
         app.kubernetes.io/part-of: viaja-con-moni
-        ## ── Istio: requerido para DestinationRule subsets ────────────────────
-        ## Permite enrutar tráfico a subsets específicos (canary, blue-green).
-        ## Cambiar a "v2" al desplegar una nueva versión en paralelo.
         version: "v1"
       annotations:
         secret.reloader.stakater.com/reload: "app-secret"
-        ## ── Istio: garantiza que el proxy Envoy esté listo ANTES de que
-        ## arranque el contenedor principal. Evita race conditions donde la app
-        ## intenta conectarse al mesh antes de que el sidecar esté activo.
         proxy.istio.io/config: |
           holdApplicationUntilProxyStarts: true
     spec:
@@ -67,16 +64,11 @@ spec:
                 sleep 2
               done
               echo "PostgreSQL disponible ✅"
-          ## ── NOTA ISTIO ───────────────────────────────────────────────────────
-          ## Los initContainers se ejecutan SIN el sidecar Envoy activo en este
-          ## pod. El tráfico va directo a postgres-service.
-          ## Por eso postgres usa PeerAuthentication PERMISSIVE (ver peer-auth).
 
         - name: migrate
           ## :migrate = stage "migrator" del Dockerfile — tiene node_modules
           ## completo con el CLI de prisma. El stage "runner" (usado por el
           ## container principal) NO incluye el CLI por optimización de tamaño.
-          ## El CI buildea y pushea :migrate en cada push a main.
           image: ghcr.io/matucr/web-viajes:migrate
           imagePullPolicy: Always
           command:
@@ -114,8 +106,6 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: NEXTAUTH_SECRET
-            ## NEXTAUTH_URL: actualizar al dominio real con HTTPS una vez que
-            ## el Gateway de Istio esté configurado con TLS.
             - name: NEXTAUTH_URL
               value: "http://181.209.94.221"
             - name: PORT
@@ -127,7 +117,9 @@ spec:
 
           resources:
             requests:
-              cpu:    "200m"
+              ## 100m por pod × 2 pods = 200m total para la app
+              ## Suficiente para Next.js en producción liviana
+              cpu:    "100m"
               memory: "256Mi"
             limits:
               cpu:    "1000m"
